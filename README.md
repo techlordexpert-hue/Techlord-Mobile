@@ -57,6 +57,23 @@ These six values are **safe to commit and safe to be public** — Firebase
 config isn't a secret, access is controlled by Firestore's own security
 rules, not by hiding this object.
 
+### How product images are stored (no billing plan required)
+
+Firebase Cloud Storage requires a billing account even for free-tier use,
+so this app doesn't use it. Instead, each photo is resized and
+re-compressed right in the browser when you upload it (turning a multi-MB
+phone photo into roughly 50–150KB), then saved as text directly inside
+that product's own Firestore document — completely free, no card needed.
+
+Each product also gets its **own** Firestore document rather than
+sharing one big document with every other product. That matters because
+Firestore caps every document at 1MB — splitting products up means that
+limit applies per product, not to your whole catalog combined, and it's
+also why editing one product doesn't need to rewrite everyone else's data
+too. If a photo is still too big after compressing, or a product's
+photos add up to too much, you'll get a clear on-screen message telling
+you to remove one or use a smaller photo — never a silent failure.
+
 ### Securing it before real launch
 
 "Test mode" leaves your database wide open to anyone on the internet for

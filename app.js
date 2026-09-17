@@ -92,9 +92,10 @@ const FIREBASE_CONFIG = {
   appId: "1:194728495785:web:1ebca39bd234170b57b7b8"
 };
 const STORE_COLLECTION = "techlord_store";
-const DOC_NAMES = ["products","categories","orders","reviews","messages","settings"];
+const PRODUCTS_COLLECTION = "techlord_products";
+const DOC_NAMES = ["categories","orders","reviews","messages","settings"]; // products are handled separately, one doc per product
 
-let fbRefs = null; // {db, doc, getDoc, setDoc, onSnapshot} once Firebase is ready
+let fbRefs = null; // {db, doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot} once Firebase is ready
 
 function firebaseConfigured(){
   return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
@@ -106,7 +107,10 @@ async function initFirebase(){
     const fsMod = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js");
     const app = appMod.initializeApp(FIREBASE_CONFIG);
     const db = fsMod.getFirestore(app);
-    fbRefs = { db, doc: fsMod.doc, getDoc: fsMod.getDoc, setDoc: fsMod.setDoc, onSnapshot: fsMod.onSnapshot };
+    fbRefs = {
+      db, doc: fsMod.doc, getDoc: fsMod.getDoc, setDoc: fsMod.setDoc, deleteDoc: fsMod.deleteDoc,
+      collection: fsMod.collection, getDocs: fsMod.getDocs, onSnapshot: fsMod.onSnapshot
+    };
     return true;
   }catch(e){
     console.error("Firebase failed to initialise — falling back to this device's local storage only.", e);
@@ -115,7 +119,8 @@ async function initFirebase(){
   }
 }
 
-/* docGet/docSet work with plain JS values (no manual JSON.stringify needed) */
+/* docGet/docSet — used for the small, non-image collections
+   (categories, orders, reviews, messages, settings) */
 async function docGet(name){
   if(fbRefs){
     try{
@@ -136,29 +141,70 @@ async function docSet(name, value){
   try{ localStorage.setItem("tle_"+name, JSON.stringify(value)); }catch(e){ /* storage full or blocked */ }
 }
 
-async function loadAll(){
-  const p = await docGet("products");
-  state.products = (p!==undefined) ? p : DEFAULT_PRODUCTS.slice();
-  if(p===undefined) await docSet("products", state.products);
+/* Products get their OWN Firestore document per product (not one shared
+   array). This matters because each product carries its own images —
+   splitting them out means Firestore's 1MB-per-document limit applies
+   per product instead of to your whole catalog combined, and editing
+   one product no longer has to rewrite every other product too. */
+function stripId(p){ const {id, ...rest} = p; return rest; }
 
-  const c = await docGet("categories");
+async function loadProductsList(){
+  if(fbRefs){
+    try{
+      const snap = await fbRefs.getDocs(fbRefs.collection(fbRefs.db, PRODUCTS_COLLECTION));
+      const list = [];
+      snap.forEach(d=> list.push({ id: d.id, ...d.data() }));
+      return list.length ? list : undefined;
+    }catch(e){ console.error("Firestore product list read failed", e); }
+  }
+  try{
+    const raw = localStorage.getItem("tle_products");
+    return raw===null ? undefined : JSON.parse(raw);
+  }catch(e){ return undefined; }
+}
+async function seedProducts(list){
+  if(fbRefs){
+    try{ await Promise.all(list.map(p=> fbRefs.setDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, p.id), stripId(p)))); return; }
+    catch(e){ console.error("Firestore product seed failed", e); }
+  }
+  try{ localStorage.setItem("tle_products", JSON.stringify(list)); }catch(e){}
+}
+async function saveOneProduct(product){
+  if(fbRefs){
+    await fbRefs.setDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, product.id), stripId(product));
+    return;
+  }
+  const idx = state.products.findIndex(p=>p.id===product.id);
+  if(idx>=0) state.products[idx]=product; else state.products.push(product);
+  try{ localStorage.setItem("tle_products", JSON.stringify(state.products)); }catch(e){}
+}
+async function deleteOneProduct(id){
+  if(fbRefs){
+    try{ await fbRefs.deleteDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, id)); return; }
+    catch(e){ console.error("Firestore product delete failed", e); }
+  }
+  try{ localStorage.setItem("tle_products", JSON.stringify(state.products.filter(p=>p.id!==id))); }catch(e){}
+}
+
+async function loadAll(){
+  const [pList, c, o, r, m, s] = await Promise.all([
+    loadProductsList(), docGet("categories"), docGet("orders"),
+    docGet("reviews"), docGet("messages"), docGet("settings")
+  ]);
+
+  state.products = (pList!==undefined) ? pList : DEFAULT_PRODUCTS.slice();
+  if(pList===undefined) await seedProducts(state.products);
+
   state.categories = (c!==undefined) ? c : DEFAULT_CATEGORIES.slice();
   if(c===undefined) await docSet("categories", state.categories);
 
-  const o = await docGet("orders");
   state.orders = (o!==undefined) ? o : [];
-
-  const r = await docGet("reviews");
   state.reviews = (r!==undefined) ? r : {};
-
-  const m = await docGet("messages");
   state.messages = (m!==undefined) ? m : [];
 
-  const s = await docGet("settings");
   state.adminPassword = (s && s.adminPassword) ? s.adminPassword : "techlord2026";
   if(!s) await docSet("settings", {adminPassword: state.adminPassword});
 }
-async function saveProducts(){ await docSet("products", state.products); }
 async function saveCategories(){ await docSet("categories", state.categories); }
 async function saveOrders(){ await docSet("orders", state.orders); }
 async function saveReviews(){ await docSet("reviews", state.reviews); }
@@ -169,7 +215,6 @@ async function saveAdminPassword(){ await docSet("settings", {adminPassword: sta
    updates the instant another device saves a change — no polling. */
 function subscribeRealtime(){
   const map = {
-    products: v=>{ state.products=v; renderProducts(); if(state.adminLoggedIn) renderAdminProducts(); },
     categories: v=>{ state.categories=v; renderCategoryChips(); if(state.adminLoggedIn) renderAdminSettings(); },
     orders: v=>{ state.orders=v; if(state.adminLoggedIn) renderAdminOrders(); },
     reviews: v=>{ state.reviews=v; if(state.adminLoggedIn) renderAdminReviews(); if(state.currentProductId) openProduct(state.currentProductId); },
@@ -183,6 +228,13 @@ function subscribeRealtime(){
       if(map[name]) map[name](v);
     }, err=>console.error("Realtime listener error on", name, err));
   });
+  fbRefs.onSnapshot(fbRefs.collection(fbRefs.db, PRODUCTS_COLLECTION), snapshot=>{
+    const list = [];
+    snapshot.forEach(d=> list.push({ id: d.id, ...d.data() }));
+    state.products = list;
+    renderProducts();
+    if(state.adminLoggedIn) renderAdminProducts();
+  }, err=>console.error("Realtime listener error on products", err));
 }
 
 
@@ -453,12 +505,13 @@ async function finalizeOrder(orderId, ref, name, phone, address, notes){
     return {productId:c.id, name:p?p.name:"Item", qty:c.qty, price:p?p.price:0};
   });
   const total = cartTotal();
-  // reduce stock
+  // reduce stock, then persist each affected product on its own
+  const touched = [];
   state.cart.forEach(c=>{
     const p = state.products.find(x=>x.id===c.id);
-    if(p) p.stock = Math.max(0, p.stock - c.qty);
+    if(p){ p.stock = Math.max(0, p.stock - c.qty); touched.push(p); }
   });
-  await saveProducts();
+  await Promise.all(touched.map(p=>saveOneProduct(p)));
 
   const order = {
     id: orderId, paystackRef: ref, name, phone, address, notes, items, total,
@@ -648,7 +701,7 @@ async function quickUpdate(id, field, value){
   const num = parseFloat(value);
   if(isNaN(num) || num<0){ showToast("Enter a valid number"); renderAdminProducts(); return; }
   p[field] = num;
-  await saveProducts();
+  await saveOneProduct(p);
   showToast((field==="price"?"Price":"Stock")+" updated — live on the store now");
   renderProducts();
 }
@@ -689,22 +742,85 @@ function renderCategorySelect(selected){
 }
 function renderImageThumbs(){
   const wrap = document.getElementById("ep-image-thumbs");
-  wrap.innerHTML = state.pendingImages.map((im,i)=>`
+  wrap.innerHTML = state.pendingImages.map((im,i)=>{
+    if(im==="UPLOADING"){
+      return `<div style="width:44px;height:44px;border-radius:8px;background:var(--blue-pale);display:flex;align-items:center;justify-content:center;">
+        <span class="spinner" style="border-color:rgba(21,43,158,0.25);border-top-color:var(--blue-deep);"></span>
+      </div>`;
+    }
+    return `
     <div style="position:relative;">
       <img class="th" src="${im}">
       <div class="thumb-x" onclick="removePendingImage(${i})">&#10005;</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 function removePendingImage(i){ state.pendingImages.splice(i,1); renderImageThumbs(); }
-function handleImageUpload(ev){
-  const files = Array.from(ev.target.files||[]);
-  files.forEach(file=>{
-    if(file.size > 1.2*1024*1024){ showToast(file.name+" is too large — use an image under ~1MB"); return; }
+
+/* Shrinks a photo before it's stored: resizes it down and re-encodes as
+   a JPEG, so a multi-MB phone photo becomes ~50–150KB instead. This is
+   what makes storing images as text inside Firestore actually safe. */
+function compressImageFile(file, maxDim=1000, quality=0.72){
+  return new Promise((resolve, reject)=>{
     const reader = new FileReader();
-    reader.onload = ()=>{ state.pendingImages.push(reader.result); renderImageThumbs(); };
+    reader.onerror = ()=>reject(new Error("read failed"));
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=>reject(new Error("decode failed"));
+      img.onload = ()=>{
+        let {width, height} = img;
+        if(width>height && width>maxDim){ height=Math.round(height*maxDim/width); width=maxDim; }
+        else if(height>=width && height>maxDim){ width=Math.round(width*maxDim/height); height=maxDim; }
+        const canvas = document.createElement("canvas");
+        canvas.width=width; canvas.height=height;
+        canvas.getContext("2d").drawImage(img,0,0,width,height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
     reader.readAsDataURL(file);
   });
+}
+function approxBytesOfDataUrl(dataUrl){
+  return Math.ceil((dataUrl||"").length * 0.75); // base64 is ~33% bigger than the raw bytes
+}
+const MAX_IMAGE_BYTES = 220*1024;     // per-image ceiling after compression
+const MAX_TOTAL_IMAGE_BYTES = 850*1024; // safe budget per product, under Firestore's 1MB doc limit
+
+async function handleImageUpload(ev){
+  const files = Array.from(ev.target.files||[]);
   ev.target.value="";
+  for(const file of files){
+    if(!file.type.startsWith("image/")){ showToast(file.name+" isn't an image"); continue; }
+    const idx = state.pendingImages.push("UPLOADING") - 1;
+    renderImageThumbs();
+    try{
+      let dataUrl = await compressImageFile(file, 1000, 0.72);
+      // If it's still large (very busy/high-detail photo), compress harder once more.
+      if(approxBytesOfDataUrl(dataUrl) > MAX_IMAGE_BYTES){
+        dataUrl = await compressImageFile(file, 700, 0.55);
+      }
+      if(approxBytesOfDataUrl(dataUrl) > MAX_IMAGE_BYTES){
+        state.pendingImages.splice(idx,1);
+        showToast(file.name+" is still too large even after compressing — try a simpler or smaller photo");
+        renderImageThumbs();
+        continue;
+      }
+      const currentTotal = state.pendingImages.reduce((s,im)=> s + (im==="UPLOADING"?0:approxBytesOfDataUrl(im)), 0);
+      if(currentTotal + approxBytesOfDataUrl(dataUrl) > MAX_TOTAL_IMAGE_BYTES){
+        state.pendingImages.splice(idx,1);
+        showToast("This product's photos are getting too large together — remove one before adding another");
+        renderImageThumbs();
+        continue;
+      }
+      state.pendingImages[idx] = dataUrl;
+    }catch(e){
+      console.error("Image processing failed", e);
+      state.pendingImages.splice(idx,1);
+      showToast("Couldn't process "+file.name);
+    }
+    renderImageThumbs();
+  }
 }
 async function saveProduct(){
   const id = document.getElementById("ep-id").value;
@@ -717,13 +833,24 @@ async function saveProduct(){
   if(!name || isNaN(price) || price<0 || isNaN(stock) || stock<0){
     showToast("Please fill in a valid name, price and stock"); return;
   }
-  if(id){
-    const p = state.products.find(x=>x.id===id);
-    Object.assign(p, {name, category, price, stock, desc, video, images: state.pendingImages.slice()});
-  }else{
-    state.products.push({ id:"p"+Date.now(), name, category, price, stock, desc, video, images: state.pendingImages.slice() });
+  if(state.pendingImages.includes("UPLOADING")){
+    showToast("Please wait for the image(s) to finish processing"); return;
   }
-  await saveProducts();
+  let product;
+  if(id){
+    product = state.products.find(x=>x.id===id);
+    Object.assign(product, {name, category, price, stock, desc, video, images: state.pendingImages.slice()});
+  }else{
+    product = { id:"p"+Date.now(), name, category, price, stock, desc, video, images: state.pendingImages.slice() };
+    state.products.push(product);
+  }
+  try{
+    await saveOneProduct(product);
+  }catch(e){
+    console.error(e);
+    showToast("Couldn't save — try removing a photo and saving again");
+    return;
+  }
   closeSheet("overlay-editproduct");
   showToast("Product saved — live on the store now");
   renderAdminProducts(); renderProducts();
@@ -733,7 +860,7 @@ async function deleteProductConfirm(){
   if(!id) return;
   if(!confirm("Delete this product? This can't be undone.")) return;
   state.products = state.products.filter(x=>x.id!==id);
-  await saveProducts();
+  await deleteOneProduct(id);
   closeSheet("overlay-editproduct");
   showToast("Product deleted");
   renderAdminProducts(); renderProducts();
