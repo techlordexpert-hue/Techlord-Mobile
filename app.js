@@ -198,7 +198,19 @@ async function loadAll(){
   if(pList===undefined) await seedProducts(state.products);
 
   state.categories = (c!==undefined) ? c : DEFAULT_CATEGORIES.slice();
-  if(c===undefined) await docSet("categories", state.categories);
+  if(c===undefined){
+    await docSet("categories", state.categories);
+  }else{
+    // Your store's category list was already saved from before, so new
+    // categories added to the code (Computer Accessories, Others) never
+    // reached it automatically. This patches them in, once, on load.
+    const mustHave = ["Computer Accessories","Others"];
+    let changed = false;
+    mustHave.forEach(cat=>{
+      if(!state.categories.includes(cat)){ state.categories.push(cat); changed = true; }
+    });
+    if(changed) await docSet("categories", state.categories);
+  }
 
   state.orders = (o!==undefined) ? o : [];
   state.reviews = (r!==undefined) ? r : {};
