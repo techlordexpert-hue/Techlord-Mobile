@@ -129,6 +129,32 @@ npx serve .
 - **Help button**: sends a message straight to the admin dashboard's
   Messages tab.
 
+## Sharing a product (rich preview, like sharing a TikTok link)
+
+Each product in **Admin → Products/Settings** has a **Share** button. It
+opens the phone's native share sheet with a special link
+(`/api/share/[product-id]`) — when that link is posted to WhatsApp Status,
+TikTok, or Instagram, those apps fetch the link and build a preview card
+showing the product's actual photo, name, and price (no file is attached
+or downloadable — it's a preview, the same way sharing a TikTok video link
+shows a thumbnail). Anyone who taps it lands straight in the app on that
+exact product, ready to buy.
+
+This is powered by two small serverless functions under `/api/` —
+`api/share/[id].js` (builds the preview page) and
+`api/product-image/[id].js` (serves the product's stored photo as a real
+image URL, since preview cards can't read the base64 image data straight
+out of Firestore). **Vercel runs these automatically** — no extra setup,
+just make sure the `api/` folder (including its subfolders) gets pushed to
+GitHub along with everything else.
+
+Two things worth knowing:
+- These functions read straight from Firestore, so they only work once
+  deployed on Vercel with your real Firebase project connected — they
+  won't work in a quick local preview or in Claude's own preview link.
+- If you ever swap to a different Firebase project, update `PROJECT_ID`
+  at the top of both files in `api/` to match.
+
 ## Default admin login
 
 The default admin password is `techlord2026` (set in `app.js` under
