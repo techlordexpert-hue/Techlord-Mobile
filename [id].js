@@ -12,8 +12,16 @@ function escapeHtml(str) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[m]));
 }
+// Firestore's REST API returns numbers as either {integerValue:"50"} (a
+// numeric string) or {doubleValue:12.5} (an actual number) — handle both.
+function firestoreNumber(field) {
+  if (!field) return undefined;
+  if (field.integerValue !== undefined) return Number(field.integerValue);
+  if (field.doubleValue !== undefined) return Number(field.doubleValue);
+  return undefined;
+}
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   const { id } = req.query;
   const origin = `https://${req.headers.host}`;
   const targetUrl = `${origin}/?product=${encodeURIComponent(id || "")}`;
@@ -29,12 +37,12 @@ export default async function handler(req, res) {
       const data = await r.json();
       const f = data.fields || {};
       if (f.name && f.name.stringValue) name = f.name.stringValue;
-      if (f.price) {
-        const priceNum = f.price.doubleValue ?? f.price.integerValue;
-        if (priceNum !== undefined) priceLine = `GH₵${Number(priceNum).toFixed(0)} — `;
-      }
+      const priceNum = firestoreNumber(f.price);
+      if (priceNum !== undefined) priceLine = `GH₵${priceNum.toFixed(0)} — `;
       const values = f.images && f.images.arrayValue && f.images.arrayValue.values;
       hasImage = !!(values && values.length);
+    } else {
+      console.error("share: Firestore fetch not ok", r.status, await r.text());
     }
   } catch (e) {
     console.error("share page error", e);
@@ -53,6 +61,7 @@ export default async function handler(req, res) {
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:image" content="${imageUrl}">
+<meta property="og:image:secure_url" content="${imageUrl}">
 <meta property="og:url" content="${targetUrl}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeHtml(title)}">
@@ -66,4 +75,4 @@ export default async function handler(req, res) {
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.status(200).send(html);
-}
+};

@@ -7,7 +7,7 @@
 
 const PROJECT_ID = "techlord-27aba"; // matches FIREBASE_CONFIG.projectId in app.js
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   const { id } = req.query;
   if (!id) { res.status(400).send("Missing product id"); return; }
 
@@ -33,4 +33,4 @@ export default async function handler(req, res) {
     console.error("product-image error", e);
     res.status(500).send("Couldn't load image");
   }
-}
+};
