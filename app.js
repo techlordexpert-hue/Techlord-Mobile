@@ -478,11 +478,17 @@ function startPaystack(){
   if(state.cart.length===0){ showToast("Your cart is empty"); return; }
   const name=document.getElementById("co-name").value.trim();
   const phone=document.getElementById("co-phone").value.trim();
-  const email=document.getElementById("co-email").value.trim();
+  let email=document.getElementById("co-email").value.trim();
   const address=document.getElementById("co-address").value.trim();
   const notes=document.getElementById("co-notes").value.trim();
   if(!name||!phone||!address){ showToast("Please fill in your name, phone and delivery location"); return; }
-  const useEmail = email || (phone.replace(/\\D/g,'')+"@techlordexpert.customer");
+
+  // A malformed email can cause Paystack to silently reject/stall the
+  // authorization step, so validate it rather than trust it blindly.
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if(email && !emailLooksValid){ showToast("That email address doesn't look right — check it or leave it blank"); return; }
+  const useEmail = emailLooksValid ? email : (phone.replace(/\D/g,'')+"@techlordexpert.customer");
+
   const total = cartTotal();
   if(total<=0){ showToast("Cart total is invalid"); return; }
 
@@ -496,21 +502,37 @@ function startPaystack(){
   }
 
   const orderId = genOrderId();
-  const handler = PaystackPop.setup({
-    key: PUBLIC_PAYSTACK_KEY,
-    email: useEmail,
-    amount: Math.round(total*100),
-    currency: "GHS",
-    ref: orderId,
-    metadata:{ custom_fields:[{display_name:"Order ID",variable_name:"order_id",value:orderId}] },
-    callback: function(response){
-      finalizeOrder(orderId, response.reference, name, phone, address, notes);
-    },
-    onClose: function(){
-      payBtn.disabled=false; payBtn.textContent="Pay with Paystack";
-    }
-  });
-  handler.openIframe();
+  const amountPesewas = Math.round(total*100);
+  console.log("[Paystack] starting checkout", { orderId, amountPesewas, currency:"GHS", email:useEmail });
+
+  try{
+    const handler = PaystackPop.setup({
+      key: PUBLIC_PAYSTACK_KEY,
+      email: useEmail,
+      amount: amountPesewas,
+      currency: "GHS",
+      ref: orderId,
+      // Explicitly listing every Ghana-relevant channel, rather than relying
+      // on the account's default channel settings, so the popup reliably
+      // offers card, mobile money, bank and USSD instead of silently
+      // defaulting to something that may not be fully enabled.
+      channels: ["card","mobile_money","bank","ussd","bank_transfer"],
+      metadata:{ custom_fields:[{display_name:"Order ID",variable_name:"order_id",value:orderId}] },
+      callback: function(response){
+        console.log("[Paystack] payment callback fired", response);
+        finalizeOrder(orderId, response.reference, name, phone, address, notes);
+      },
+      onClose: function(){
+        console.log("[Paystack] popup closed without completing payment", { orderId });
+        payBtn.disabled=false; payBtn.textContent="Pay with Paystack";
+      }
+    });
+    handler.openIframe();
+  }catch(e){
+    console.error("[Paystack] setup/openIframe threw an error", e);
+    payBtn.disabled=false; payBtn.textContent="Pay with Paystack";
+    showToast("Couldn't open Paystack — please try again in a moment");
+  }
 }
 
 async function finalizeOrder(orderId, ref, name, phone, address, notes){
@@ -556,7 +578,7 @@ async function doTrackOrder(){
   const q = document.getElementById("track-input").value.trim().toLowerCase();
   const box = document.getElementById("track-results");
   if(!q){ box.innerHTML = `<div class="muted-box">Enter your order ID or the phone number you ordered with.</div>`; return; }
-  const matches = state.orders.filter(o=> o.id.toLowerCase()===q || o.phone.replace(/\\D/g,'').includes(q.replace(/\\D/g,'')) && q.replace(/\\D/g,'').length>=6 );
+  const matches = state.orders.filter(o=> o.id.toLowerCase()===q || o.phone.replace(/\D/g,'').includes(q.replace(/\D/g,'')) && q.replace(/\D/g,'').length>=6 );
   if(matches.length===0){ box.innerHTML = `<div class="muted-box">We couldn't find an order matching that. Double-check the ID or phone number.</div>`; return; }
   box.innerHTML = matches.slice().reverse().map(o=>`
     <div class="list-row" style="align-items:flex-start;flex-direction:column;">
@@ -953,7 +975,7 @@ function renderAdminMessages(){
       <div style="font-size:13px;margin:8px 0;">${escapeHtml(m.message)}</div>
       <div style="display:flex;gap:8px;width:100%;">
         ${!m.read?`<button class="btn btn-outline" style="flex:1;padding:9px;font-size:12.5px;" onclick="markMessageRead('${m.id}')">Mark as read</button>`:''}
-        <button class="btn btn-primary" style="flex:1;padding:9px;font-size:12.5px;" onclick="window.open('https://wa.me/${WHATSAPP_NUMBER.startsWith('233')?'':'233'}'+'${m.phone.replace(/\\D/g,'')}','_blank')">Reply on WhatsApp</button>
+        <button class="btn btn-primary" style="flex:1;padding:9px;font-size:12.5px;" onclick="window.open('https://wa.me/${WHATSAPP_NUMBER.startsWith('233')?'':'233'}'+'${m.phone.replace(/\D/g,'')}','_blank')">Reply on WhatsApp</button>
       </div>
     </div>
   `).join("");
