@@ -1,4 +1,4 @@
-# TechLord Expert — Krafted Memoryz
+# TechLord & Co.
 
 A mobile-first storefront for photo printing & frames, laptop stickers, phone
 cases, graphic design, bulk SMS, web development, and custom printing

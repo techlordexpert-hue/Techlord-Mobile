@@ -1,5 +1,5 @@
 /* ============================================================
-   TechLord Expert — storefront + admin
+   TechLord & Co. — storefront + admin
    Data layer: Firebase Firestore (real, synced across all devices),
    with a localStorage fallback if Firebase isn't configured yet.
    ============================================================ */
@@ -578,7 +578,7 @@ function statusLabel(s){
 /* ---------------- Help / Contact ---------------- */
 function openHelp(){ openSheet("overlay-help"); }
 function openWhatsApp(){
-  const msg = encodeURIComponent("Hi TechLord Expert, I'd like to ask about your products/services.");
+  const msg = encodeURIComponent("Hi TechLord & Co., I'd like to ask about your products/services.");
   window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, "_blank");
 }
 async function submitHelp(){
@@ -702,7 +702,13 @@ function renderProductManagerInto(containerId){
                 <input type="number" value="${p.stock}" onchange="quickUpdate('${p.id}','stock',this.value)">
               </div>
             </div>
-            <button class="link-btn" style="margin-top:8px;" onclick="openEditProduct('${p.id}')">Edit details, images &amp; video &rarr;</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+              <button class="link-btn" onclick="openEditProduct('${p.id}')">Edit details, images &amp; video &rarr;</button>
+              <button class="link-btn" style="display:flex;align-items:center;gap:4px;" onclick="shareProduct('${p.id}')">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path stroke-linecap="round" d="M8.6 10.5l6.8-3.9M8.6 13.5l6.8 3.9"/></svg>
+                Share
+              </button>
+            </div>
           </div>
         </div>`;
       }).join("");
@@ -731,6 +737,7 @@ function openAddProduct(){
   state.pendingImages=[];
   renderCategorySelect();
   renderImageThumbs();
+  document.getElementById("ep-share-btn").style.display="none";
   document.getElementById("ep-delete-btn").style.display="none";
   openSheet("overlay-editproduct");
 }
@@ -747,6 +754,7 @@ function openEditProduct(id){
   state.pendingImages = (p.images||[]).slice();
   renderCategorySelect(p.category);
   renderImageThumbs();
+  document.getElementById("ep-share-btn").style.display="block";
   document.getElementById("ep-delete-btn").style.display="block";
   openSheet("overlay-editproduct");
 }
@@ -878,6 +886,28 @@ async function deleteProductConfirm(){
   closeSheet("overlay-editproduct");
   showToast("Product deleted");
   renderAdminProducts(); renderProducts();
+}
+
+/* Builds a direct link straight to one product (customers land on it
+   ready to add to cart / buy) and hands it to the phone's native share
+   sheet — so posting to WhatsApp status, TikTok, or Instagram is just
+   picking the app from the share menu that pops up. */
+async function shareProduct(id){
+  const p = state.products.find(x=>x.id===id);
+  if(!p){ showToast("Save the product first, then you can share it"); return; }
+  const shareUrl = `${location.origin}${location.pathname}?product=${encodeURIComponent(id)}`;
+  const shareText = `Check out ${p.name} — GH₵${p.price.toFixed(0)} on TechLord & Co.!`;
+  if(navigator.share){
+    try{ await navigator.share({ title: p.name, text: shareText, url: shareUrl }); }
+    catch(e){ /* user closed the share sheet — nothing to do */ }
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+    showToast("Link copied! Paste it into your WhatsApp status, TikTok or Instagram caption");
+  }catch(e){
+    showToast("Couldn't copy automatically — link: "+shareUrl);
+  }
 }
 
 function renderAdminOrders(){
@@ -1068,6 +1098,13 @@ let didFirstRender = false;
 function safeRenderAll(){
   didFirstRender = true;
   renderAll();
+  openSharedProductFromURL();
+}
+function openSharedProductFromURL(){
+  try{
+    const pid = new URLSearchParams(location.search).get("product");
+    if(pid && state.products.some(p=>p.id===pid)) openProduct(pid);
+  }catch(e){ /* ignore malformed URLs */ }
 }
 (async function init(){
   let usingFirebase = false;
