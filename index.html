@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>TechLord Expert</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://js.paystack.co/v1/inline.js"></script>
 <link rel="stylesheet" href="style.css">
@@ -42,12 +44,21 @@
     </div>
   </div>
 
-  <div class="chip-row" id="category-chips"></div>
+  <div class="chip-row" id="category-chips">
+    <div class="skeleton-line" style="width:50px;height:30px;border-radius:999px;margin:0;flex-shrink:0;"></div>
+    <div class="skeleton-line" style="width:90px;height:30px;border-radius:999px;margin:0;flex-shrink:0;"></div>
+    <div class="skeleton-line" style="width:70px;height:30px;border-radius:999px;margin:0;flex-shrink:0;"></div>
+  </div>
 
   <div class="section">
     <div class="section-title" id="results-title">All products</div>
   </div>
-  <div class="grid" id="product-grid"></div>
+  <div class="grid" id="product-grid">
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+  </div>
 </div>
 
 <!-- ================= TRACK ORDER VIEW ================= -->

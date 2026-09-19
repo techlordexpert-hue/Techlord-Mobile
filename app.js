@@ -15,10 +15,12 @@ const DEFAULT_CATEGORIES = [
   "Photo Printing & Frames",
   "Laptop Stickers",
   "Phone Cases",
+  "Computer Accessories",
   "Graphic Designing",
   "Bulk SMS",
   "Web Development",
-  "Custom Printing Services"
+  "Custom Printing Services",
+  "Others"
 ];
 
 const DEFAULT_PRODUCTS = [
@@ -1050,13 +1052,42 @@ function renderAll(){
   renderProducts();
   renderCartBadge();
 }
-(async function init(){
-  const usingFirebase = await initFirebase();
-  await loadAll();
+let didFirstRender = false;
+function safeRenderAll(){
+  didFirstRender = true;
   renderAll();
-  if(usingFirebase){
-    subscribeRealtime(); // instant cross-device updates, no polling needed
-  }else{
-    startPolling(); // same-device fallback so multiple open tabs stay in sync
+}
+(async function init(){
+  let usingFirebase = false;
+  try{
+    usingFirebase = await initFirebase();
+  }catch(e){
+    console.error("Firebase failed to start — showing the store without live sync.", e);
+    usingFirebase = false;
+  }
+  try{
+    await loadAll();
+  }catch(e){
+    console.error("Couldn't load store data — falling back to defaults so the page isn't blank.", e);
+    if(!state.products || state.products.length===0) state.products = DEFAULT_PRODUCTS.slice();
+    if(!state.categories || state.categories.length===0) state.categories = DEFAULT_CATEGORIES.slice();
+  }
+  safeRenderAll();
+  try{
+    if(usingFirebase) subscribeRealtime(); // instant cross-device updates, no polling needed
+    else startPolling(); // same-device fallback so multiple open tabs stay in sync
+  }catch(e){
+    console.error("Realtime sync failed to start — falling back to periodic refresh.", e);
+    startPolling();
   }
 })();
+// Absolute last resort: if something above still leaves the page stuck on
+// loading placeholders after 8 seconds, force real content to appear.
+setTimeout(()=>{
+  if(!didFirstRender){
+    console.error("Store took too long to load — forcing a render with defaults.");
+    if(!state.products || state.products.length===0) state.products = DEFAULT_PRODUCTS.slice();
+    if(!state.categories || state.categories.length===0) state.categories = DEFAULT_CATEGORIES.slice();
+    safeRenderAll();
+  }
+}, 8000);

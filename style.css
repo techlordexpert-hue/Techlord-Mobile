@@ -135,6 +135,14 @@
   }
   .add-btn:disabled{background:#C9CEE0;}
   .empty-note{grid-column:1/-1;text-align:center;color:var(--ink-soft);font-size:13px;padding:30px 10px;}
+  .skeleton-card{pointer-events:none;}
+  .skeleton-img,.skeleton-line{
+    background:linear-gradient(90deg,#EEF1FB 25%,#E2E7FA 37%,#EEF1FB 63%);
+    background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:8px;
+  }
+  .skeleton-img{width:100%;aspect-ratio:1/1;border-radius:0;}
+  .skeleton-line{height:10px;margin:10px 11px 0;}
+  @keyframes shimmer{0%{background-position:100% 0;}100%{background-position:0 0;}}
 
   /* ---------- Bottom nav ---------- */
   .bottomnav{
