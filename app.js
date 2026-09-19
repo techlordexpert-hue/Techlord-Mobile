@@ -920,7 +920,7 @@ async function shareProduct(id){
   // This link generates a WhatsApp/TikTok-style preview card (photo, name,
   // price) — no downloadable file, just a preview — and sends anyone who
   // taps it straight into the app on this exact product.
-  const shareUrl = `${location.origin}/api/share/${encodeURIComponent(id)}`;
+  const shareUrl = `${location.origin}/api/share?id=${encodeURIComponent(id)}`;
   const shareText = `Check out ${p.name} — GH₵${p.price.toFixed(0)} on TechLord & Co.!`;
   if(navigator.share){
     try{ await navigator.share({ title: p.name, text: shareText, url: shareUrl }); }

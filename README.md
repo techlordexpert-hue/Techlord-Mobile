@@ -133,20 +133,21 @@ npx serve .
 
 Each product in **Admin → Products/Settings** has a **Share** button. It
 opens the phone's native share sheet with a special link
-(`/api/share/[product-id]`) — when that link is posted to WhatsApp Status,
-TikTok, or Instagram, those apps fetch the link and build a preview card
-showing the product's actual photo, name, and price (no file is attached
-or downloadable — it's a preview, the same way sharing a TikTok video link
-shows a thumbnail). Anyone who taps it lands straight in the app on that
-exact product, ready to buy.
+(`/api/share?id=<product-id>`) — when that link is posted to WhatsApp
+Status, TikTok, or Instagram, those apps fetch the link and build a
+preview card showing the product's actual photo, name, and price (no file
+is attached or downloadable — it's a preview, the same way sharing a
+TikTok video link shows a thumbnail). Anyone who taps it lands straight in
+the app on that exact product, ready to buy.
 
-This is powered by two small serverless functions under `/api/` —
-`api/share/[id].js` (builds the preview page) and
-`api/product-image/[id].js` (serves the product's stored photo as a real
-image URL, since preview cards can't read the base64 image data straight
-out of Firestore). **Vercel runs these automatically** — no extra setup,
-just make sure the `api/` folder (including its subfolders) gets pushed to
-GitHub along with everything else.
+This is powered by two small serverless functions that sit directly in
+`api/` — `api/share.js` (builds the preview page) and
+`api/product-image.js` (serves the product's stored photo as a real image
+URL, since preview cards can't read the base64 image data straight out of
+Firestore). **Vercel runs these automatically** — no extra setup, just
+make sure both files end up inside a top-level `api` folder in your repo
+(not loose at the repo root, and not nested any deeper than that one
+folder).
 
 Two things worth knowing:
 - These functions read straight from Firestore, so they only work once
