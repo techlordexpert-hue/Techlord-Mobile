@@ -129,32 +129,16 @@ npx serve .
 - **Help button**: sends a message straight to the admin dashboard's
   Messages tab.
 
-## Sharing a product (rich preview, like sharing a TikTok link)
+## Sharing a product
 
 Each product in **Admin → Products/Settings** has a **Share** button. It
-opens the phone's native share sheet with a special link
-(`/api/share?id=<product-id>`) — when that link is posted to WhatsApp
-Status, TikTok, or Instagram, those apps fetch the link and build a
-preview card showing the product's actual photo, name, and price (no file
-is attached or downloadable — it's a preview, the same way sharing a
-TikTok video link shows a thumbnail). Anyone who taps it lands straight in
-the app on that exact product, ready to buy.
-
-This is powered by two small serverless functions that sit directly in
-`api/` — `api/share.js` (builds the preview page) and
-`api/product-image.js` (serves the product's stored photo as a real image
-URL, since preview cards can't read the base64 image data straight out of
-Firestore). **Vercel runs these automatically** — no extra setup, just
-make sure both files end up inside a top-level `api` folder in your repo
-(not loose at the repo root, and not nested any deeper than that one
-folder).
-
-Two things worth knowing:
-- These functions read straight from Firestore, so they only work once
-  deployed on Vercel with your real Firebase project connected — they
-  won't work in a quick local preview or in Claude's own preview link.
-- If you ever swap to a different Firebase project, update `PROJECT_ID`
-  at the top of both files in `api/` to match.
+opens the phone's native share sheet with the product's actual photo
+attached, plus a caption with the name, price, and a link back to that
+product — pick WhatsApp, TikTok, Instagram, or anything else installed,
+and the photo goes straight into your Status/Story/post. Anyone who later
+taps the link in the caption lands in the app on that exact product, ready
+to buy. This needs no server component — it works with a plain deploy,
+same as everything else in this repo.
 
 ## Default admin login
 

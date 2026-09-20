@@ -914,21 +914,37 @@ async function deleteProductConfirm(){
    ready to add to cart / buy) and hands it to the phone's native share
    sheet — so posting to WhatsApp status, TikTok, or Instagram is just
    picking the app from the share menu that pops up. */
+async function dataUrlToFile(dataUrl, filename){
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: blob.type || "image/jpeg" });
+}
 async function shareProduct(id){
   const p = state.products.find(x=>x.id===id);
   if(!p){ showToast("Save the product first, then you can share it"); return; }
-  // This link generates a WhatsApp/TikTok-style preview card (photo, name,
-  // price) — no downloadable file, just a preview — and sends anyone who
-  // taps it straight into the app on this exact product.
-  const shareUrl = `${location.origin}/api/share?id=${encodeURIComponent(id)}`;
-  const shareText = `Check out ${p.name} — GH₵${p.price.toFixed(0)} on TechLord & Co.!`;
+  const shareUrl = `${location.origin}${location.pathname}?product=${encodeURIComponent(id)}`;
+  const shareText = `Check out ${p.name} — GH₵${p.price.toFixed(0)} on TechLord & Co.!\n${shareUrl}`;
+
+  // Share the actual photo — this is what makes it show up as an image on
+  // WhatsApp Status, TikTok, and Instagram, instead of a bare link.
+  if(p.images && p.images[0] && navigator.canShare){
+    try{
+      const filename = (p.name||"product").replace(/[^a-zA-Z0-9]+/g,"-").toLowerCase()+".jpg";
+      const file = await dataUrlToFile(p.images[0], filename);
+      if(navigator.canShare({ files:[file] })){
+        await navigator.share({ files:[file], title:p.name, text:shareText });
+        return;
+      }
+    }catch(e){ console.error("Image share failed, falling back to a link share", e); }
+  }
+  // Fallback: share (or copy) just the link + caption
   if(navigator.share){
     try{ await navigator.share({ title: p.name, text: shareText, url: shareUrl }); }
     catch(e){ /* user closed the share sheet — nothing to do */ }
     return;
   }
   try{
-    await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+    await navigator.clipboard.writeText(shareText);
     showToast("Link copied! Paste it into your WhatsApp status, TikTok or Instagram caption");
   }catch(e){
     showToast("Couldn't copy automatically — link: "+shareUrl);
