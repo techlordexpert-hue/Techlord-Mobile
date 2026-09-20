@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>TechLord & Co.</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="TechLord & Co.">
+<meta property="og:description" content="Photo printing & frames, laptop stickers, phone cases, graphic design, bulk SMS, web development and custom printing — order online.">
+<meta property="og:image" content="favicon.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://js.paystack.co/v1/inline.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= STOREFRONT ================= -->
+<div id="view-storefront" class="view active">
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="brand"><img src="logo-white.png" alt="TechLord & Co." class="brand-logo"><span class="brand-text">TechLord &amp; Co.<small>WINNEBA &amp; AIYINASI</small></span></div>
+      <div class="top-actions">
+        <button class="icon-btn" onclick="openTracking()" aria-label="Track order">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h13l4 4v6h-2m-14 0H3V7m0 10h9m5 0a2 2 0 11-4 0 2 2 0 014 0zM7 17a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        </button>
+        <button class="icon-btn" onclick="openCart()" aria-label="Cart">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h2l2.4 12.4a2 2 0 002 1.6h8.2a2 2 0 002-1.6L21 8H6"/><circle cx="9" cy="20" r="1.4" fill="currentColor" stroke="none"/><circle cx="17" cy="20" r="1.4" fill="currentColor" stroke="none"/></svg>
+          <span class="badge" id="cart-badge" style="display:none;">0</span>
+        </button>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.3-4.3"/></svg>
+      <input id="search-input" placeholder="Search frames, stickers, printing..." oninput="renderProducts()">
+    </div>
+  </div>
+
+  <div class="hero">
+    <span class="tag"><span class="dot"></span> Delivery across Winneba, Aiyinasi &amp; beyond</span>
+    <h1>Your memories, crafted &amp; delivered.</h1>
+    <p>Photo prints, frames, stickers, design and tech services — order in minutes.</p>
+    <div class="hero-cta">
+      <button class="btn btn-primary" onclick="scrollToCategories()">Shop now</button>
+      <a class="btn btn-ghost" href="#" onclick="openHelp();return false;">Ask a question</a>
+    </div>
+  </div>
+
+  <div class="chip-row" id="category-chips">
+    <div class="skeleton-line" style="width:50px;height:30px;border-radius:999px;margin:0;flex-shrink:0;"></div>
+    <div class="skeleton-line" style="width:90px;height:30px;border-radius:999px;margin:0;flex-shrink:0;"></div>
+    <div class="skeleton-line" style="width:70px;height:30px;border-radius:999px;margin:0;flex-shrink:0;"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" id="results-title">All products</div>
+  </div>
+  <div class="grid" id="product-grid">
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+    <div class="card skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%;"></div><div class="skeleton-line" style="width:40%;"></div></div>
+  </div>
+</div>
+
+<!-- ================= TRACK ORDER VIEW ================= -->
+<div id="view-tracking" class="view">
+  <div class="admin-top" style="position:sticky;">
+    <div class="admin-top-row">
+      <button class="icon-btn" onclick="goHome()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg></button>
+      <h3 style="margin:0;font-family:'Baloo 2';font-size:17px;">Track your order</h3>
+      <div style="width:40px;"></div>
+    </div>
+  </div>
+  <div class="page-pad">
+    <div class="field">
+      <label>Order ID or phone number</label>
+      <input id="track-input" placeholder="e.g. TLE-10234 or 054...">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="doTrackOrder()">Find my order</button>
+    <div id="track-results" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- ================= BOTTOM NAV ================= -->
+<div class="bottomnav" id="bottomnav">
+  <button class="active" onclick="goHome()" data-nav="home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9z"/></svg>
+    Home
+  </button>
+  <button onclick="scrollToCategories()" data-nav="categories">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+    Categories
+  </button>
+  <button onclick="openTracking()" data-nav="track">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 3"/></svg>
+    Track
+  </button>
+  <button onclick="openCart()" data-nav="cart">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h2l2.4 12.4a2 2 0 002 1.6h8.2a2 2 0 002-1.6L21 8H6"/><circle cx="9" cy="20" r="1.4" fill="currentColor" stroke="none"/><circle cx="17" cy="20" r="1.4" fill="currentColor" stroke="none"/></svg>
+    Cart
+  </button>
+  <button onclick="openAdminEntry()" data-nav="admin">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V5l7-3z"/></svg>
+    Admin
+  </button>
+</div>
+
+<!-- ================= FLOATERS ================= -->
+<div class="floaters">
+  <button class="fab help" onclick="openHelp()" aria-label="Help">
+    <span class="fab-badge" id="help-badge" style="display:none;">0</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.1 9a3 3 0 115.8 1c0 2-2.9 2.5-2.9 4.5"/><circle cx="12" cy="17.5" r="0.9" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="10"/></svg>
+  </button>
+  <button class="fab wa" onclick="openWhatsApp()" aria-label="WhatsApp">
+    <svg viewBox="0 0 32 32" fill="#fff"><path d="M16.02 2.67C8.6 2.67 2.6 8.66 2.6 16.08c0 2.6.72 5.03 2 7.1L2.2 29.33l6.35-2.33a13.4 13.4 0 007.47 2.23c7.42 0 13.42-6 13.42-13.4s-6-13.16-13.42-13.16zm0 24.4c-2.36 0-4.55-.68-6.4-1.86l-.46-.28-4.14 1.52 1.35-4.3-.3-.48a10.9 10.9 0 01-1.68-5.6c0-6.08 4.95-11.02 11.03-11.02 6.08 0 11.03 4.94 11.03 11.02s-4.95 11-11.03 11zm6.05-8.24c-.33-.17-1.95-.96-2.25-1.07-.3-.11-.52-.17-.74.17-.22.33-.85 1.07-1.05 1.28-.2.22-.39.24-.72.08-.33-.17-1.4-.52-2.66-1.65-.98-.87-1.65-1.96-1.84-2.28-.2-.33-.02-.5.15-.68.15-.17.35-.44.52-.66.17-.22.22-.38.34-.63.11-.24.05-.44-.06-.61-.11-.17-.72-1.74-.99-2.38-.26-.63-.53-.55-.73-.56-.19-.01-.41-.01-.63-.01-.22 0-.57.08-.87.4-.3.33-1.14 1.11-1.14 2.7 0 1.6 1.17 3.14 1.33 3.36.17.22 2.27 3.46 5.5 4.72 3.23 1.26 3.23.84 3.81.79.58-.06 1.87-.76 2.13-1.5.26-.74.26-1.37.18-1.5-.07-.13-.28-.22-.6-.39z"/></svg>
+  </button>
+</div>
+
+<!-- ================= CART SHEET ================= -->
+<div class="overlay" id="overlay-cart">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><h3>Your cart</h3><button class="close-x" onclick="closeSheet('overlay-cart')">&#10005;</button></div>
+    <div class="sheet-body" id="cart-body"></div>
+  </div>
+</div>
+
+<!-- ================= PRODUCT DETAIL SHEET ================= -->
+<div class="overlay" id="overlay-product">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><h3 id="pd-title-top">Product</h3><button class="close-x" onclick="closeSheet('overlay-product')">&#10005;</button></div>
+    <div class="sheet-body" id="product-body"></div>
+  </div>
+</div>
+
+<!-- ================= CHECKOUT SHEET ================= -->
+<div class="overlay" id="overlay-checkout">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><h3>Checkout</h3><button class="close-x" onclick="closeSheet('overlay-checkout')">&#10005;</button></div>
+    <div class="sheet-body">
+      <div class="field"><label>Full name</label><input id="co-name" placeholder="Your name"></div>
+      <div class="row2">
+        <div class="field"><label>Phone number</label><input id="co-phone" placeholder="054..."></div>
+        <div class="field"><label>Email (for receipt)</label><input id="co-email" placeholder="you@email.com"></div>
+      </div>
+      <div class="field"><label>Delivery location</label><input id="co-address" placeholder="Area, town"></div>
+      <div class="field"><label>Notes (optional)</label><textarea id="co-notes" placeholder="Anything we should know about your order"></textarea></div>
+      <div style="border-top:1px solid var(--line);margin:14px 0;padding-top:12px;">
+        <div class="cart-summary-row"><span>Subtotal</span><span id="co-subtotal">GH₵0</span></div>
+        <div class="cart-summary-row total"><span>Total to pay</span><span id="co-total">GH₵0</span></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="pay-btn" onclick="startPaystack()">Pay with Paystack</button>
+      <div class="note-inline">Payment is processed securely by Paystack. Your order is recorded once payment succeeds, and you'll get an Order ID to track it.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= HELP / CONTACT SHEET ================= -->
+<div class="overlay" id="overlay-help">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><h3>Contact TechLord &amp; Co.</h3><button class="close-x" onclick="closeSheet('overlay-help')">&#10005;</button></div>
+    <div class="sheet-body">
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-top:0;">Have a question or an issue with an order? Send us a message — it goes straight to our dashboard.</p>
+      <div class="field"><label>Your name</label><input id="hp-name" placeholder="Your name"></div>
+      <div class="field"><label>Phone / WhatsApp number</label><input id="hp-phone" placeholder="054..."></div>
+      <div class="field"><label>Order ID (if this is about an order)</label><input id="hp-order" placeholder="e.g. TLE-10234 (optional)"></div>
+      <div class="field"><label>Message</label><textarea id="hp-msg" placeholder="Tell us what you need help with"></textarea></div>
+      <button class="btn btn-primary btn-block" onclick="submitHelp()">Send message</button>
+      <div style="text-align:center;margin:14px 0 4px;color:var(--ink-soft);font-size:12px;">— or —</div>
+      <button class="btn btn-outline btn-block" onclick="openWhatsApp()">Chat with us on WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ADMIN LOGIN ================= -->
+<div id="view-admin-login" class="view">
+  <div class="admin-login-wrap">
+    <div class="admin-card">
+      <div class="shield">
+        <img src="logo.png" alt="TechLord & Co." style="width:32px;height:32px;object-fit:contain;">
+      </div>
+      <h2>Admin Portal</h2>
+      <p class="sub">TechLord &amp; Co.</p>
+      <div class="field">
+        <label>Password</label>
+        <div class="pw-wrap">
+          <input type="password" id="admin-pw-input" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')doAdminLogin()">
+          <button onclick="toggleAdminPwVisibility()" id="pw-toggle-btn" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="doAdminLogin()">Log in</button>
+      <div class="admin-error" id="admin-login-error"></div>
+      <button class="link-btn" style="display:block;text-align:center;margin:16px auto 0;" onclick="goHome()">&larr; Back to store</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ADMIN DASHBOARD ================= -->
+<div id="view-admin" class="view">
+  <div class="admin-shell">
+    <div class="admin-top">
+      <div class="admin-top-row">
+        <div class="brand" style="font-size:17px;">Admin Dashboard</div>
+        <button class="icon-btn" onclick="adminLogout()" aria-label="Log out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4-4-4M21 12H9M13 4H6a2 2 0 00-2 2v12a2 2 0 002 2h7"/></svg>
+        </button>
+      </div>
+      <div class="admin-tabs">
+        <button class="atab active" data-tab="overview" onclick="setAdminTab('overview')">Overview</button>
+        <button class="atab" data-tab="products" onclick="setAdminTab('products')">Products</button>
+        <button class="atab" data-tab="orders" onclick="setAdminTab('orders')">Orders</button>
+        <button class="atab" data-tab="messages" onclick="setAdminTab('messages')">Messages <span class="dot-badge" id="msg-tab-badge" style="display:none;">0</span></button>
+        <button class="atab" data-tab="reviews" onclick="setAdminTab('reviews')">Reviews</button>
+        <button class="atab" data-tab="settings" onclick="setAdminTab('settings')">Settings</button>
+      </div>
+    </div>
+
+    <div id="admin-tab-overview" class="admin-tab-content page-pad"></div>
+    <div id="admin-tab-products" class="admin-tab-content page-pad" style="display:none;"></div>
+    <div id="admin-tab-orders" class="admin-tab-content page-pad" style="display:none;"></div>
+    <div id="admin-tab-messages" class="admin-tab-content page-pad" style="display:none;"></div>
+    <div id="admin-tab-reviews" class="admin-tab-content page-pad" style="display:none;"></div>
+    <div id="admin-tab-settings" class="admin-tab-content page-pad" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- ================= ADD/EDIT PRODUCT SHEET ================= -->
+<div class="overlay" id="overlay-editproduct">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><h3 id="ep-title">Add product</h3><button class="close-x" onclick="closeSheet('overlay-editproduct')">&#10005;</button></div>
+    <div class="sheet-body">
+      <input type="hidden" id="ep-id">
+      <div class="field"><label>Product name</label><input id="ep-name" placeholder="e.g. A4 Photo Print"></div>
+      <div class="field">
+        <label>Category</label>
+        <select id="ep-category"></select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Price (GH₵)</label><input id="ep-price" type="number" min="0" placeholder="0"></div>
+        <div class="field"><label>Stock quantity</label><input id="ep-stock" type="number" min="0" placeholder="0"></div>
+      </div>
+      <div class="field"><label>Description</label><textarea id="ep-desc" placeholder="Short description customers will see"></textarea></div>
+      <div class="field">
+        <label>Images</label>
+        <div class="thumb-row" id="ep-image-thumbs"></div>
+        <label class="file-btn" style="margin-top:8px;">
+          + Add image(s) from phone
+          <input type="file" accept="image/*" multiple id="ep-image-input" style="display:none;" onchange="handleImageUpload(event)">
+        </label>
+      </div>
+      <div class="field">
+        <label>Video link (optional)</label>
+        <input id="ep-video" placeholder="Paste a YouTube/Drive/video URL">
+        <div class="note-inline">Videos are linked, not uploaded directly — large video files are too big to store in-app. Paste a link from YouTube, Google Drive, TikTok, etc.</div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="saveProduct()">Save product</button>
+      <button class="btn btn-outline btn-block" style="margin-top:8px;" id="ep-share-btn" onclick="shareProduct(document.getElementById('ep-id').value)">Share this product</button>
+      <button class="btn btn-danger btn-block" style="margin-top:8px;" id="ep-delete-btn" onclick="deleteProductConfirm()">Delete product</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
