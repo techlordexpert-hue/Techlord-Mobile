@@ -132,13 +132,12 @@ npx serve .
 ## Sharing a product
 
 Each product in **Admin → Products/Settings** has a **Share** button. It
-opens the phone's native share sheet with the product's actual photo
-attached, plus a caption with the name, price, and a link back to that
-product — pick WhatsApp, TikTok, Instagram, or anything else installed,
-and the photo goes straight into your Status/Story/post. Anyone who later
-taps the link in the caption lands in the app on that exact product, ready
-to buy. This needs no server component — it works with a plain deploy,
-same as everything else in this repo.
+opens the phone's native share sheet with a plain link back to that exact
+product, plus a caption with the name and price — pick WhatsApp, TikTok,
+Instagram, or anything else installed. Anyone who taps the link lands in
+the app on that exact product, ready to buy. This needs no server
+component — it works with a plain deploy, same as everything else in this
+repo.
 
 ## Default admin login
 
