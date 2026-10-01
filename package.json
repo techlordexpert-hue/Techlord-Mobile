@@ -1,8 +1,6 @@
 {
-  "name": "techlord-and-co",
-  "private": true,
+  "name": "study-partner",
   "version": "1.0.0",
-  "engines": {
-    "node": ">=18"
-  }
+  "private": true,
+  "engines": { "node": "20.x" }
 }

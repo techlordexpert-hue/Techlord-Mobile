@@ -1,147 +1,64 @@
-# TechLord & Co.
+# Study Partner
 
-A mobile-first storefront for photo printing & frames, laptop stickers, phone
-cases, graphic design, bulk SMS, web development, and custom printing
-services — with a cart, Paystack checkout, order tracking, product reviews,
-a WhatsApp support button, and an admin dashboard for managing products,
-orders, messages, and reviews.
+A static front-end (`index.html`) plus two small Vercel serverless functions in `api/`.
+No build step — deploy as-is.
 
-## Files
+## 1. Deploy to Vercel
 
-```
-techlord-expert/
-├── index.html   ← page structure/markup
-├── style.css    ← all styling
-├── app.js       ← all app logic (products, cart, checkout, admin, storage)
-├── .gitignore
-└── README.md
-```
+**Dashboard (easiest):** go to https://vercel.com/new, choose "Deploy without Git" /
+drag-and-drop, and drop this whole folder in.
 
-Plain HTML/CSS/JavaScript — no build step, no `npm install` required.
+**CLI:** `npm i -g vercel`, then from inside this folder run `vercel`, then `vercel --prod`.
 
-## ⚡ Set this up before you rely on it — 5 minutes
+**GitHub:** push this folder to a repo and import it at https://vercel.com/new.
+Framework preset "Other" — no build command, output directory is `/`.
 
-By default, product/order/review/message data is saved in the browser's
-own storage (`localStorage`). That means it now **survives a reload** —
-but it only lives on that one device. An edit made on your phone won't
-show up on a customer's phone. To fix that for real, connect a free
-Firebase project — it takes about 5 minutes and costs nothing at this
-scale:
+## 2. Turn on shared accounts (recommended)
 
-1. Go to **console.firebase.google.com** → **Add project** → give it any
-   name → finish the setup wizard (you can skip Google Analytics).
-2. In your new project, click **Build → Firestore Database → Create
-   database** → choose **Start in test mode** → pick any location → Enable.
-   *(Test mode is fine to launch with — see the security note below for
-   what to do once you're live.)*
-3. Click the **gear icon → Project settings**, scroll to "Your apps",
-   click the **`</>`** (web) icon, give the app any nickname, and click
-   **Register app**. Firebase will show you a `firebaseConfig` object
-   that looks like this:
-   ```js
-   const firebaseConfig = {
-     apiKey: "AIza...",
-     authDomain: "your-project.firebaseapp.com",
-     projectId: "your-project",
-     storageBucket: "your-project.appspot.com",
-     messagingSenderId: "123456789",
-     appId: "1:123456789:web:abc123"
-   };
-   ```
-4. Open `app.js` in this project, find `const FIREBASE_CONFIG = { ... }`
-   near the top, and paste your six values in (keep the same field names).
-5. Save, commit, and push. Once deployed, every admin edit will appear on
-   every device instantly — no reload needed.
+Without this step the app still works, but each visitor's accounts, courses, ads and
+photos are saved only in *their own* browser — nobody sees anyone else's data, and you
+(admin) won't see students who signed up on other devices.
 
-These six values are **safe to commit and safe to be public** — Firebase
-config isn't a secret, access is controlled by Firestore's own security
-rules, not by hiding this object.
+1. In your Vercel project → **Storage** → **Create Database** → **Upstash → Redis** (there's a free tier).
+2. Connect it to this project — Vercel automatically adds `KV_REST_API_URL` and
+   `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` / `..._TOKEN`) as environment variables.
+3. Redeploy. The app auto-detects the database — nothing else to configure.
 
-### How product images are stored (no billing plan required)
+Once connected: every student's account, timetable, courses, ads and the day-photos you
+upload as admin are stored centrally and visible from any device, including yours.
 
-Firebase Cloud Storage requires a billing account even for free-tier use,
-so this app doesn't use it. Instead, each photo is resized and
-re-compressed right in the browser when you upload it (turning a multi-MB
-phone photo into roughly 50–150KB), then saved as text directly inside
-that product's own Firestore document — completely free, no card needed.
+## 3. Research (AI assistant) — back on
 
-Each product also gets its **own** Firestore document rather than
-sharing one big document with every other product. That matters because
-Firestore caps every document at 1MB — splitting products up means that
-limit applies per product, not to your whole catalog combined, and it's
-also why editing one product doesn't need to rewrite everyone else's data
-too. If a photo is still too big after compressing, or a product's
-photos add up to too much, you'll get a clear on-screen message telling
-you to remove one or use a smaller photo — never a silent failure.
+The chat bubble in Library / PASCO / Online Courses is called **Research**. It answers
+using Google Search via the Gemini API.
 
-### Securing it before real launch
+1. Get a free key at https://aistudio.google.com/apikey
+   - Google currently issues two key formats — the older `AIzaSy...` and the newer
+     `AQ....` "Authentication Key" format. **Both work** — this app sends the key via
+     the `x-goog-api-key` header either way, which is Google's current documented
+     method for both formats.
+2. In Vercel → your project → **Settings → Environment Variables**, add:
+   `GEMINI_API_KEY` = your key (paste the whole thing, whichever format it starts with)
+3. Redeploy.
 
-"Test mode" leaves your database wide open to anyone on the internet for
-30 days. Before you go live with real customers, go to **Firestore
-Database → Rules** and tighten them — at minimum, something like:
+If Research replies with a message about Google rejecting the key: this is a known,
+currently-ongoing issue on Google's side affecting some newly-issued `AQ.` keys (see the
+Google AI developer forum). Regenerating the key in AI Studio and updating the Vercel
+env var usually clears it.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /techlord_store/{doc} {
-      allow read: if true;   // anyone can browse products/prices
-      allow write: if false; // block direct writes — see note below
-    }
-  }
-}
-```
+To switch Research off again later: open `index.html`, search for `const showAI=`, and
+change it to `const showAI=false;`.
 
-With `allow write: if false`, only you (via the Firebase console, or a
-backend you control) could edit data directly — which would break the
-admin panel's ability to save. A more complete real-world setup adds
-proper Firebase Authentication for the admin login instead of the
-current plain-JavaScript password check (see below), and scopes write
-access to logged-in admins only. This is a good next step to ask about
-once the store is live.
+## 4. Admin login
 
-## ⚠️ Other things to know before real launch
+There's no visible "Admin" link anywhere in the app — sign in on the normal sign-up form
+using the special name/password you set (defaults: `Yo Lord!` / `#124#`).
+You can change these by setting `ADMIN_USER` and `ADMIN_PASS` as environment variables.
 
-- **The admin password check runs in the browser.** It's a screen lock,
-  not real security — anyone who opens dev tools can read it in the page
-  source. Fine for keeping casual visitors out of the admin panel; not
-  enough to rely on alone once real stock/pricing data matters.
-- **Paystack payment verification.** The Paystack **public** key
-  (`pk_live_...`) in `app.js` is safe there — it's designed for browser
-  use. The **secret** key must never go in this repo or any front-end
-  file. It belongs only on a server you control, used to verify each
-  payment via Paystack's webhook/verify endpoint before an order is
-  marked as paid. Without that step, a payment "success" from the browser
-  can't be fully trusted. Happy to help build that small backend piece
-  next.
-
-## Running it locally
-
-Open `index.html` directly in a browser, or serve the folder with:
-```bash
-npx serve .
-```
-
-## Support widgets
-
-- **WhatsApp button** (bottom-right): opens a chat with the number set in
-  `app.js` as `WHATSAPP_NUMBER`. Update it there if the number changes.
-- **Help button**: sends a message straight to the admin dashboard's
-  Messages tab.
-
-## Sharing a product
-
-Each product in **Admin → Products/Settings** has a **Share** button. It
-opens the phone's native share sheet with a plain link back to that exact
-product, plus a caption with the name and price — pick WhatsApp, TikTok,
-Instagram, or anything else installed. Anyone who taps the link lands in
-the app on that exact product, ready to buy. This needs no server
-component — it works with a plain deploy, same as everything else in this
-repo.
-
-## Default admin login
-
-The default admin password is `techlord2026` (set in `app.js` under
-`state.adminPassword`, used only the very first time the database has no
-password saved yet). Change it immediately after your first deploy via
-**Admin → Settings → Change admin password**.
+## Notes
+- The Paystack **public** key is embedded in the front-end for the ad checkout — that's
+  expected and safe. Never put a Paystack *secret* key in this file or any front-end code.
+- `AUTH_SECRET` (optional env var): a random string used to sign login sessions. If you
+  don't set one, a stable one is derived automatically from your database token, which is
+  fine for most cases — set your own if you want to be able to invalidate all sessions by
+  rotating it.
