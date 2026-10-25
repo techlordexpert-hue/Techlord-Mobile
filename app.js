@@ -1,7 +1,7 @@
 /* ============================================================
-   TechLord & Co. — storefront + admin
-   Data layer: Firebase Firestore (real, synced across all devices),
-   with a localStorage fallback if Firebase isn't configured yet.
+   TechLord & Co. — storefront + shopkeeper dashboard
+   Data layer: Upstash Redis, reached only through the /api/store function
+   (see api/store.js). The browser holds no database key.
    ============================================================ */
 
 const PUBLIC_PAYSTACK_KEY = "pk_live_e81e6a7c861963103869a7310dd19821f476bad7";
@@ -10,57 +10,6 @@ const PUBLIC_PAYSTACK_KEY = "pk_live_e81e6a7c861963103869a7310dd19821f476bad7";
 
 const WHATSAPP_NUMBER = "233544667931"; // 054 466 7931 in international format
 const CONTACT_LINE = "054 466 7931 & 050 444 0199";
-
-/* ---- Upstash Redis "speed cache" (see README) ----
-   The shopkeeper's saves push a light copy of the catalogue to Redis; every visitor
-   reads it first, so products + packages show instantly while Firestore loads
-   the full data in the background.
-   Only the READ-ONLY token ever goes here — it is safe in a browser. The full
-   token lives on the server (api/catalog.js), never in this file. */
-const UPSTASH_REST_URL = "";          // e.g. "https://eu1-xxxx.upstash.io"
-const UPSTASH_READONLY_TOKEN = "";    // Upstash console -> "Read-Only Token"
-const CATALOG_API = "/api/catalog";   // serverless function (writes; also a read fallback)
-const CATALOG_KEY = "tl:catalog";
-
-const DEFAULT_CATEGORIES = [
-  "Photo Printing & Frames",
-  "Laptop Stickers",
-  "Phone Cases",
-  "Computer Accessories",
-  "Graphic Designing",
-  "Bulk SMS",
-  "Web Development",
-  "Custom Printing Services",
-  "Others"
-];
-
-const DEFAULT_PRODUCTS = [
-  {id:"p1",name:"A4 Photo Print",category:"Photo Printing & Frames",price:50,stock:40,images:[],video:"",desc:"High quality A4 sized print of your favourite photo, ready to frame or gift."},
-  {id:"p2",name:"A3 Photo Print",category:"Photo Printing & Frames",price:90,stock:35,images:[],video:"",desc:"Bigger A3 print for a bolder wall statement."},
-  {id:"p3",name:"15 x 19 Print",category:"Photo Printing & Frames",price:130,stock:25,images:[],video:"",desc:"15 x 19 premium photo print."},
-  {id:"p4",name:"16 x 20 Print",category:"Photo Printing & Frames",price:160,stock:25,images:[],video:"",desc:"16 x 20 premium photo print."},
-  {id:"p5",name:"19 x 23 Print",category:"Photo Printing & Frames",price:190,stock:20,images:[],video:"",desc:"19 x 23 premium photo print."},
-  {id:"p6",name:"20 x 24 Print",category:"Photo Printing & Frames",price:220,stock:20,images:[],video:"",desc:"20 x 24 premium photo print."},
-  {id:"p7",name:"20 x 30 Print",category:"Photo Printing & Frames",price:280,stock:15,images:[],video:"",desc:"20 x 30 large premium photo print."},
-  {id:"p8",name:"23 x 32 Print",category:"Photo Printing & Frames",price:330,stock:12,images:[],video:"",desc:"23 x 32 large premium photo print."},
-  {id:"p9",name:"24 x 36 Print",category:"Photo Printing & Frames",price:400,stock:10,images:[],video:"",desc:"24 x 36 extra-large statement print."},
-  {id:"p10",name:"Table Top Frame",category:"Photo Printing & Frames",price:80,stock:30,images:[],video:"",desc:"Elegant table top frame for your desk or shelf."},
-  {id:"p11",name:"Frameless Frame",category:"Photo Printing & Frames",price:120,stock:20,images:[],video:"",desc:"Modern frameless display for a clean, floating look."},
-  {id:"p12",name:"Citation Frame",category:"Photo Printing & Frames",price:150,stock:18,images:[],video:"",desc:"Beautifully finished frame for certificates, awards and citations."},
-  {id:"p13",name:"Interior Decor Frame",category:"Photo Printing & Frames",price:180,stock:15,images:[],video:"",desc:"Statement frame for interior decor pieces."},
-  {id:"p14",name:"Laptop Sticker — Back Only",category:"Laptop Stickers",price:60,stock:40,images:[],video:"",desc:"Custom sticker skin for the back of your laptop only."},
-  {id:"p15",name:"Laptop Sticker — Keyboard & Back",category:"Laptop Stickers",price:90,stock:30,images:[],video:"",desc:"Custom sticker covering the keyboard area and back panel."},
-  {id:"p16",name:"Laptop Sticker — Full Body",category:"Laptop Stickers",price:130,stock:25,images:[],video:"",desc:"Full-body custom laptop skin, back, keyboard deck and edges."},
-  {id:"p17",name:"Custom Phone Case",category:"Phone Cases",price:70,stock:35,images:[],video:"",desc:"Personalised phone case printed with your chosen photo or design."},
-  {id:"p18",name:"Logo & Brand Design",category:"Graphic Designing",price:150,stock:999,images:[],video:"",desc:"Professional logo and brand identity design service."},
-  {id:"p19",name:"Flyer / Poster Design",category:"Graphic Designing",price:80,stock:999,images:[],video:"",desc:"Eye-catching flyer or poster design for your business or event."},
-  {id:"p20",name:"Bulk SMS — 500 Units",category:"Bulk SMS",price:60,stock:999,images:[],video:"",desc:"Send 500 SMS units to your customers or contacts, fast and reliable."},
-  {id:"p21",name:"Bulk SMS — 2000 Units",category:"Bulk SMS",price:200,stock:999,images:[],video:"",desc:"Send 2000 SMS units — great for larger campaigns and announcements."},
-  {id:"p22",name:"Business Website (Starter)",category:"Web Development",price:1500,stock:999,images:[],video:"",desc:"A clean, mobile-friendly website to showcase your business online."},
-  {id:"p23",name:"E-commerce Website",category:"Web Development",price:3500,stock:999,images:[],video:"",desc:"Full online store with cart, checkout and admin panel — like this one."},
-  {id:"p24",name:"Custom T-Shirt Printing",category:"Custom Printing Services",price:45,stock:999,images:[],video:"",desc:"Print your design or photo on a quality T-shirt."},
-  {id:"p25",name:"Custom Mug Printing",category:"Custom Printing Services",price:35,stock:999,images:[],video:"",desc:"Personalised mug printing — great for gifts."}
-];
 
 let state = {
   products: [],
@@ -71,12 +20,15 @@ let state = {
   me: null,            // the customer recognised on this device (no account — just a Customer ID)
   phoneCust: null,     // customer found from the phone typed at checkout
   checkoutOfferId: "",
-  fullLoaded: false, restLoaded: false,
-  categories: DEFAULT_CATEGORIES.slice(),
+  fullLoaded: false,
+  categories: [],
+  catalogTs: 0,
+  itemCache: {},       // full photos + reviews, fetched when a product is opened
+  checkoutOffers: [],
+  meData: null,
   orders: [],
   reviews: {},
   messages: [],
-  adminPassword: "techlord2026",
   activeCategory: "All",
   cart: [],
   currentProductId: null,
@@ -88,173 +40,27 @@ let state = {
 };
 
 /* ============================================================
-   Storage layer — real, permanent storage.
-
-   HOW THIS WORKS:
-   - If FIREBASE_CONFIG below is filled in, all data (products, orders,
-     reviews, messages, admin password) is saved to Firebase Firestore.
-     Firestore pushes live updates to every open device instantly —
-     this is what makes admin edits appear on customers' phones without
-     anyone refreshing.
-   - If FIREBASE_CONFIG is left empty, the app automatically falls back
-     to the browser's localStorage. That means data now SURVIVES a
-     reload (it no longer vanishes), but it only lives on that one
-     device/browser — it will not appear on anyone else's phone.
-
-   See README.md for the 5-minute steps to create a free Firebase
-   project and fill in FIREBASE_CONFIG.
+   DATA LAYER — Upstash Redis, reached only through /api/store.
+   The browser never holds a database key. Public data comes from the
+   catalogue endpoint; customer and shopkeeper data need the right ID/password.
    ============================================================ */
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAx5naMKpyrf62NZc8UOcVhEx0NR868T30",
-  authDomain: "techlord-27aba.firebaseapp.com",
-  projectId: "techlord-27aba",
-  storageBucket: "techlord-27aba.firebasestorage.app",
-  messagingSenderId: "194728495785",
-  appId: "1:194728495785:web:1ebca39bd234170b57b7b8"
-};
-const STORE_COLLECTION = "techlord_store";
-const PRODUCTS_COLLECTION = "techlord_products";
-const PACKAGES_COLLECTION = "techlord_packages";
-const CUSTOMERS_COLLECTION = "techlord_customers";
-const DOC_NAMES = ["categories","orders","reviews","messages","settings","offers","layout"]; // products are handled separately, one doc per product
-
-let fbRefs = null; // {db, doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot} once Firebase is ready
-
-function firebaseConfigured(){
-  return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
+const API = "/api/store";
+function adminToken(){ try{ return localStorage.getItem("tle_admin_token")||""; }catch(e){ return ""; } }
+function authHeaders(){ const t=adminToken(); return t ? {"x-admin-token":t} : {}; }
+async function api(a, body){
+  let r;
+  try{ r = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json",...authHeaders()},body:JSON.stringify({...(body||{}),a})}); }
+  catch(e){ throw Object.assign(new Error("You seem to be offline — check your connection."),{status:0}); }
+  let j={}; try{ j=await r.json(); }catch(e){}
+  if(r.status===401 && j.expired) adminSessionExpired();
+  if(!r.ok) throw Object.assign(new Error(j.error||("Something went wrong ("+r.status+")")),{status:r.status});
+  return j;
 }
-async function initFirebase(){
-  if(!firebaseConfigured()) return false;
-  try{
-    const appMod = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js");
-    const fsMod = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js");
-    const app = appMod.initializeApp(FIREBASE_CONFIG);
-    const db = fsMod.getFirestore(app);
-    fbRefs = {
-      db, doc: fsMod.doc, getDoc: fsMod.getDoc, setDoc: fsMod.setDoc, deleteDoc: fsMod.deleteDoc,
-      collection: fsMod.collection, getDocs: fsMod.getDocs, onSnapshot: fsMod.onSnapshot,
-      query: fsMod.query, where: fsMod.where, limit: fsMod.limit
-    };
-    return true;
-  }catch(e){
-    console.error("Firebase failed to initialise — falling back to this device's local storage only.", e);
-    fbRefs = null;
-    return false;
-  }
+async function getApi(q){
+  const r = await fetch(API+"?"+q,{headers:authHeaders()});
+  if(!r.ok) throw Object.assign(new Error("HTTP "+r.status),{status:r.status});
+  return r.json();
 }
-
-/* docGet/docSet — used for the small, non-image collections
-   (categories, orders, reviews, messages, settings) */
-async function docGet(name){
-  if(fbRefs){
-    try{
-      const snap = await fbRefs.getDoc(fbRefs.doc(fbRefs.db, STORE_COLLECTION, name));
-      return snap.exists() ? snap.data().value : undefined;
-    }catch(e){ console.error("Firestore read failed for", name, e); }
-  }
-  try{
-    const raw = localStorage.getItem("tle_"+name);
-    return raw===null ? undefined : JSON.parse(raw);
-  }catch(e){ return undefined; }
-}
-async function docSet(name, value){
-  if(fbRefs){
-    try{ await fbRefs.setDoc(fbRefs.doc(fbRefs.db, STORE_COLLECTION, name), {value}); return; }
-    catch(e){ console.error("Firestore write failed for", name, e); }
-  }
-  try{ localStorage.setItem("tle_"+name, JSON.stringify(value)); }catch(e){ /* storage full or blocked */ }
-}
-
-/* Products get their OWN Firestore document per product (not one shared
-   array). This matters because each product carries its own images —
-   splitting them out means Firestore's 1MB-per-document limit applies
-   per product instead of to your whole catalog combined, and editing
-   one product no longer has to rewrite every other product too. */
-function stripId(p){ const {id, ...rest} = p; return rest; }
-
-async function loadProductsList(){
-  if(fbRefs){
-    try{
-      const snap = await fbRefs.getDocs(fbRefs.collection(fbRefs.db, PRODUCTS_COLLECTION));
-      const list = [];
-      snap.forEach(d=> list.push({ id: d.id, ...d.data() }));
-      return list.length ? list : undefined;
-    }catch(e){ console.error("Firestore product list read failed", e); }
-  }
-  try{
-    const raw = localStorage.getItem("tle_products");
-    return raw===null ? undefined : JSON.parse(raw);
-  }catch(e){ return undefined; }
-}
-async function seedProducts(list){
-  if(fbRefs){
-    try{ await Promise.all(list.map(p=> fbRefs.setDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, p.id), stripId(p)))); return; }
-    catch(e){ console.error("Firestore product seed failed", e); }
-  }
-  try{ localStorage.setItem("tle_products", JSON.stringify(list)); }catch(e){}
-}
-async function saveOneProduct(product){
-  if(fbRefs){
-    await fbRefs.setDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, product.id), stripId(product));
-    return;
-  }
-  const idx = state.products.findIndex(p=>p.id===product.id);
-  if(idx>=0) state.products[idx]=product; else state.products.push(product);
-  try{ localStorage.setItem("tle_products", JSON.stringify(state.products)); }catch(e){}
-}
-/* Stock-only write: merges just the stock field, so a customer's purchase can
-   never overwrite a product's photos or description. */
-async function saveStockOnly(p){
-  if(fbRefs){
-    try{ await fbRefs.setDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, p.id), {stock:p.stock}, {merge:true}); return; }
-    catch(e){ console.error("Stock write failed", e); }
-  }
-  await saveOneProduct(p);
-}
-async function deleteOneProduct(id){
-  if(fbRefs){
-    try{ await fbRefs.deleteDoc(fbRefs.doc(fbRefs.db, PRODUCTS_COLLECTION, id)); return; }
-    catch(e){ console.error("Firestore product delete failed", e); }
-  }
-  try{ localStorage.setItem("tle_products", JSON.stringify(state.products.filter(p=>p.id!==id))); }catch(e){}
-}
-
-async function loadCatalog(){
-  const [pList, kList, c, l] = await Promise.all([loadProductsList(), loadPackagesList(), docGet("categories"), docGet("layout")]);
-
-  state.products = (pList!==undefined) ? pList : DEFAULT_PRODUCTS.slice();
-  if(pList===undefined) await seedProducts(state.products);
-  state.packages = kList || [];
-  state.layout = normLayout(l);
-
-  state.categories = (c!==undefined) ? c : DEFAULT_CATEGORIES.slice();
-  if(c===undefined){
-    await docSet("categories", state.categories);
-  }else{
-    // Your store's category list was already saved from before, so new
-    // categories added to the code (Computer Accessories, Others) never
-    // reached it automatically. This patches them in, once, on load.
-    const mustHave = ["Computer Accessories","Others"];
-    let changed = false;
-    mustHave.forEach(cat=>{
-      if(!state.categories.includes(cat)){ state.categories.push(cat); changed = true; }
-    });
-    if(changed) await docSet("categories", state.categories);
-  }
-  state.fullLoaded = true;
-}
-async function loadRest(){
-  const [o, r, m, s, of] = await Promise.all([docGet("orders"), docGet("reviews"), docGet("messages"), docGet("settings"), docGet("offers")]);
-  state.orders = (o!==undefined) ? o : [];
-  state.reviews = (r!==undefined) ? r : {};
-  state.messages = (m!==undefined) ? m : [];
-  state.offers = (of!==undefined && of) ? of : [];
-  state.adminPassword = (s && s.adminPassword) ? s.adminPassword : "techlord2026";
-  if(!s) await docSet("settings", {adminPassword: state.adminPassword});
-  state.restLoaded = true;
-}
-async function loadAll(){ await Promise.all([loadCatalog(), loadRest()]); }
-
 function normLayout(v){
   return {
     sectionOrder: (v && v.sectionOrder && v.sectionOrder.length===2) ? v.sectionOrder : ["packages","products"],
@@ -262,56 +68,74 @@ function normLayout(v){
     productPins: (v && v.productPins) || []
   };
 }
-/* Waits until orders/reviews/messages are loaded, so a save can never
-   overwrite them with a half-empty list. */
-let fullPromise = null;
-function ensureFull(){
-  if(state.restLoaded && state.fullLoaded) return Promise.resolve();
-  if(!fullPromise) fullPromise = refreshSharedData().finally(()=>{ fullPromise=null; });
-  return fullPromise;
-}
-async function saveCategories(){ await docSet("categories", state.categories); }
-async function saveOrders(){ await docSet("orders", state.orders); }
-async function saveReviews(){ await docSet("reviews", state.reviews); }
-async function saveMessages(){ await docSet("messages", state.messages); }
-async function saveAdminPassword(){ await docSet("settings", {adminPassword: state.adminPassword}); }
+const pkgNorm = k=>({...k, kind:"package", stock:999});
 
-/* Live sync: when Firebase is configured, every device gets pushed
-   updates the instant another device saves a change — no polling. */
-function subscribeRealtime(){
-  const map = {
-    categories: v=>{ state.categories=v; renderCategoryChips(); if(state.adminLoggedIn) renderAdminSettings(); },
-    orders: v=>{ state.orders=v; if(state.adminLoggedIn) renderAdminOrders(); },
-    reviews: v=>{ state.reviews=v; if(state.adminLoggedIn) renderAdminReviews(); if(state.currentProductId) openProduct(state.currentProductId); },
-    messages: v=>{ state.messages=v; if(state.adminLoggedIn){ renderAdminMessages(); updateMessageBadge(); } },
-    settings: v=>{ if(v && v.adminPassword) state.adminPassword=v.adminPassword; },
-    offers: v=>{ state.offers=v||[]; if(state.adminLoggedIn) renderAdminOffers(); refreshMeIfOpen(); },
-    layout: v=>{ state.layout=normLayout(v); applyLayout(); renderPackages(); renderProducts(); if(state.adminLoggedIn) renderAdminLayout(); }
-  };
-  DOC_NAMES.forEach(name=>{
-    fbRefs.onSnapshot(fbRefs.doc(fbRefs.db, STORE_COLLECTION, name), snap=>{
-      if(!snap.exists()) return;
-      const v = snap.data().value;
-      if(map[name]) map[name](v);
-    }, err=>console.error("Realtime listener error on", name, err));
-  });
-  fbRefs.onSnapshot(fbRefs.collection(fbRefs.db, PRODUCTS_COLLECTION), snapshot=>{
-    const list = [];
-    snapshot.forEach(d=> list.push({ id: d.id, ...d.data() }));
-    state.products = list;
-    state.fullLoaded = true;
-    renderProducts();
-    if(state.adminLoggedIn){ renderAdminProducts(); renderAdminLayout(); }
-  }, err=>console.error("Realtime listener error on products", err));
-  fbRefs.onSnapshot(fbRefs.collection(fbRefs.db, PACKAGES_COLLECTION), snapshot=>{
-    const list = [];
-    snapshot.forEach(d=> list.push(pkgFromDoc(d.id, d.data())));
-    state.packages = list;
-    renderPackages();
-    if(state.adminLoggedIn){ renderAdminPackages(); renderAdminLayout(); }
-  }, err=>console.error("Realtime listener error on packages", err));
+/* The public catalogue: light product + package data (small thumbnails only). */
+function applyCatalog(snap){
+  if(!snap || snap.v!==2) return false;
+  if(state.fullLoaded && snap.ts===state.catalogTs) return false;
+  state.catalogTs = snap.ts;
+  state.products = snap.products || [];
+  state.categories = snap.categories || [];
+  state.layout = normLayout(snap.layout);
+  if(!state.adminLoggedIn){            // the shopkeeper's own copy (incl. hidden packages) takes priority
+    state.packages = (snap.packages||[]).map(pkgNorm);
+    state.offers = snap.offers || [];
+  }
+  state.fullLoaded = true;
+  applyLayout(); renderCategoryChips(); renderProducts(); renderPackages();
+  return true;
+}
+async function loadCatalog(){
+  const snap = await getApi("r=catalog");
+  if(applyCatalog(snap)){ try{ localStorage.setItem("tle_snapshot", JSON.stringify(snap)); }catch(e){} }
+}
+/* Full photos + reviews for one product/package, fetched when it is opened. */
+async function loadItem(id, fresh){
+  if(!fresh && state.itemCache[id]) return state.itemCache[id];
+  const j = await getApi("r=item&id="+encodeURIComponent(id)+(fresh ? "&t="+Date.now() : "&v="+state.catalogTs));
+  state.itemCache[id] = j;
+  return j;
+}
+/* Everything the shopkeeper needs (orders, customers, messages...). Returns true if anything changed. */
+async function loadAdminData(){
+  const d = await api("adminData");
+  const sig = JSON.stringify(d);
+  if(sig===state.adminSig) return false;
+  state.adminSig = sig;
+  state.catalogTs = d.ts; state.fullLoaded = true;
+  state.products = d.products; state.packages = d.packages.map(pkgNorm); state.categories = d.categories;
+  state.layout = normLayout(d.layout); state.offers = d.offers;
+  state.orders = d.orders; state.customers = d.customers; state.messages = d.messages; state.reviews = d.reviews;
+  return true;
+}
+function adminSessionExpired(){
+  if(!state.adminLoggedIn) return;
+  try{ localStorage.removeItem("tle_admin_token"); }catch(e){}
+  state.adminLoggedIn=false; state.adminSig="";
+  showView("view-admin-login"); showToast("Your shopkeeper session ended — please log in again");
+}
+function showLoadError(){
+  if(state.products.length) return;
+  document.getElementById("product-grid").innerHTML = `<div class="empty-note">We couldn't load the store. Check your connection.<br><br><button class="btn btn-primary" onclick="location.reload()">Try again</button></div>`;
+  document.getElementById("category-chips").innerHTML = "";
 }
 
+/* Keeps every open device fresh without a database connection: a light check every
+   15 seconds while the page is visible (and immediately when you come back to it). */
+let pollBusy=false;
+async function pollNow(){
+  if(pollBusy || document.hidden) return; pollBusy=true;
+  try{
+    if(state.adminLoggedIn){ if(await loadAdminData()) renderAdminAll(); }
+    else await loadCatalog();
+  }catch(e){ /* offline — try again next time */ }
+  pollBusy=false;
+}
+function startPolling(){
+  setInterval(pollNow, 15000);
+  document.addEventListener("visibilitychange", pollNow);
+}
 
 /* ---------------- Toast ---------------- */
 let toastTimer=null;
@@ -412,9 +236,10 @@ function openProduct(id){
   if(!p) return;
   state.currentProductId=id;
   document.getElementById("pd-title-top").textContent = p.name;
-  const revs = state.reviews[id]||[];
+  const det = state.itemCache[id];
+  const revs = (det && det.reviews) || [];
   const avg = revs.length ? (revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1) : null;
-  const imgs = itemImages(p);
+  const imgs = (det && det.images && det.images.length) ? det.images : itemImages(p);
   const gallery = imgs.length ? imgs.map(im=>`<img src="${im}">`).join("") : `<div style="width:140px;height:140px;border-radius:14px;background:var(--blue-pale);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${placeholderIcon()}</div>`;
   const stockClass = p.stock<=0?'out':(p.stock<=3?'low':'ok');
   const stockLabel = p.kind==='package' ? 'Business branding package' : (p.stock<=0?'Out of stock':(p.stock<=3?`Only ${p.stock} left`:'In stock'));
@@ -433,7 +258,7 @@ function openProduct(id){
       <button class="tab-btn" id="tb-write" onclick="setPdTab('write')">Write a review</button>
     </div>
     <div id="pd-panel-reviews">
-      ${revs.length===0?'<p style="color:var(--ink-soft);font-size:13px;">No reviews yet — be the first to share your experience.</p>':revs.slice().reverse().map(r=>`
+      ${revs.length===0?`<p style="color:var(--ink-soft);font-size:13px;">${det?"No reviews yet — be the first to share your experience.":"Loading reviews…"}</p>`:revs.slice().reverse().map(r=>`
         <div class="review">
           <div class="review-top"><span class="nm">${escapeHtml(r.name)}</span><span class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span></div>
           <p>${escapeHtml(r.comment)}</p>
@@ -453,6 +278,9 @@ function openProduct(id){
   `;
   bindStarPicker();
   openSheet("overlay-product");
+  if(!det) loadItem(id).then(()=>{
+    if(state.currentProductId===id && document.getElementById("overlay-product").classList.contains("show")) openProduct(id);
+  }).catch(()=>{});
 }
 function setPdTab(which){
   document.getElementById("tb-reviews").classList.toggle("active", which==="reviews");
@@ -474,12 +302,12 @@ async function submitReviewInline(productId){
   const name=document.getElementById("rv-name").value.trim();
   const text=document.getElementById("rv-text").value.trim();
   if(!name||!text||state.ratingPick===0){ showToast("Please add your name, a rating and a comment"); return; }
-  await ensureFull();
-  if(!state.reviews[productId]) state.reviews[productId]=[];
-  state.reviews[productId].push({name, rating:state.ratingPick, comment:text, date:Date.now()});
-  await saveReviews();
-  showToast("Thanks for your review!");
-  openProduct(productId);
+  try{
+    const j = await api("review",{pid:productId, name, rating:state.ratingPick, comment:text});
+    state.itemCache[productId] = {...(state.itemCache[productId]||{images:[]}), reviews:j.reviews};
+    showToast("Thanks for your review!");
+    openProduct(productId);
+  }catch(e){ showToast(e.message); }
 }
 
 /* ---------------- Cart ---------------- */
@@ -548,15 +376,15 @@ function renderCart(){
 }
 async function goToCheckout(){
   closeSheet("overlay-cart");
-  await ensureFull();            // never check out against half-loaded data
   state.checkoutOfferId = "";
-  state.phoneCust = null;
+  state.checkoutOffers = state.offers.filter(o=>o.percent>0).map(o=>({id:o.id,title:o.title,percent:o.percent}));
   if(state.me){
     const f={ "co-name":state.me.name,"co-phone":state.me.phone,"co-email":state.me.email||"","co-address":state.me.address||"","co-paynum":state.me.payNumber||"" };
     Object.keys(f).forEach(id=>{ const el=document.getElementById(id); if(el && !el.value) el.value=f[id]; });
   }
   refreshCheckoutOffers();
   openSheet("overlay-checkout");
+  if(document.getElementById("co-phone").value) lookupPhoneForOffers();
 }
 
 /* ---------------- Checkout + Paystack ---------------- */
@@ -625,46 +453,37 @@ function startPaystack(){
 }
 
 async function finalizeOrder(orderId, ref, form){
-  await ensureFull();
-  const items = state.cart.map(c=>{
-    const p = findItem(c.id);
-    return {productId:c.id, name:p?p.name:"Item", qty:c.qty, price:p?p.price:0, kind:(p&&p.kind==="package")?"package":"product"};
-  });
-  const subtotal = cartTotal();
-  const disc = currentDiscount();
-  const total = Math.max(0, subtotal - disc.amount);
-
-  // reduce stock on real products only (packages are unlimited)
-  const touched = [];
-  state.cart.forEach(c=>{
-    const p = state.products.find(x=>x.id===c.id);
-    if(p){ p.stock = Math.max(0, p.stock - c.qty); touched.push(p); }
-  });
-  await Promise.all(touched.map(p=>saveStockOnly(p)));
-
-  // find (or create) this customer — phone number is how repeat buyers are recognised
-  const cust = await upsertCustomerFromOrder(form, total, disc.offer);
-
-  const order = {
-    id: orderId, paystackRef: ref, customerId: cust.id,
-    name: form.name, phone: form.phone, email: form.email||"", payNumber: form.payNumber||form.phone,
-    address: form.address, notes: form.notes, items, subtotal, total,
-    discount: disc.amount>0 ? {offerId:disc.offer.id, title:disc.offer.title, percent:disc.offer.percent, amount:disc.amount} : null,
-    status: "processing", createdAt: Date.now()
-  };
-  const freshOrders = await docGet("orders");           // re-read so we never overwrite someone else's order
-  if(freshOrders!==undefined) state.orders = freshOrders;
-  state.orders.push(order);
-  await saveOrders();
-  state.cart = [];
-  state.checkoutOfferId = "";
+  // The money has been taken, so this must never get lost: keep a copy on the device until the
+  // server confirms (it will retry on the next visit), and de-duplicate by Paystack reference.
+  const payload = {orderId, ref, form, items: state.cart.map(c=>({id:c.id,qty:c.qty})), offerId: state.checkoutOfferId};
+  try{ localStorage.setItem("tle_pending_order", JSON.stringify(payload)); }catch(e){}
+  let res=null, lastErr=null;
+  for(let i=0;i<3 && !res;i++){
+    try{ res = await api("order", payload); }
+    catch(e){ lastErr=e; if(e.status && e.status<500) break; await new Promise(r=>setTimeout(r,1200*(i+1))); }
+  }
+  const btn=document.getElementById("pay-btn");
+  btn.disabled=false; btn.textContent="Pay with Paystack";
+  if(!res){
+    closeSheet("overlay-checkout");
+    showToast("Payment received, but we couldn't record the order yet. Keep this page open — we'll retry. Reference: "+ref);
+    return;
+  }
+  completeOrder(res);
+}
+async function completeOrder(res){
+  try{ localStorage.removeItem("tle_pending_order"); }catch(e){}
+  state.cart = []; state.checkoutOfferId = "";
+  rememberMe(res.customer, res.order.phone);
   renderCartBadge();
-  renderProducts();
-
-  document.getElementById("pay-btn").disabled=false;
-  document.getElementById("pay-btn").textContent="Pay with Paystack";
   closeSheet("overlay-checkout");
-  showOrderSuccess(order, cust);
+  showOrderSuccess(res.order, res.customer);
+  try{ await loadCatalog(); }catch(e){}          // fresh stock levels
+}
+async function retryPendingOrder(){
+  let p=null; try{ p=JSON.parse(localStorage.getItem("tle_pending_order")||"null"); }catch(e){}
+  if(!p) return;
+  try{ completeOrder(await api("order", p)); }catch(e){ if(e.status && e.status<500) { try{ localStorage.removeItem("tle_pending_order"); }catch(x){} } }
 }
 
 function showOrderSuccess(order, cust){
@@ -685,13 +504,15 @@ function showOrderSuccess(order, cust){
 
 /* ---------------- Order tracking ---------------- */
 async function doTrackOrder(){
-  await refreshSharedData();
-  const q = document.getElementById("track-input").value.trim().toLowerCase();
+  const q = document.getElementById("track-input").value.trim();
   const box = document.getElementById("track-results");
   if(!q){ box.innerHTML = `<div class="muted-box">Enter your order ID or the phone number you ordered with.</div>`; return; }
-  const matches = state.orders.filter(o=> o.id.toLowerCase()===q || (o.customerId||'').toLowerCase()===q || o.phone.replace(/\D/g,'').includes(q.replace(/\D/g,'')) && q.replace(/\D/g,'').length>=6 );
-  if(matches.length===0){ box.innerHTML = `<div class="muted-box">We couldn't find an order matching that. Double-check the ID or phone number.</div>`; return; }
-  box.innerHTML = matches.slice().reverse().map(o=>`
+  box.innerHTML = `<div class="muted-box">Looking…</div>`;
+  let orders=[];
+  try{ orders = (await api("track",{q})).orders; }
+  catch(e){ box.innerHTML = `<div class="muted-box">${escapeHtml(e.message)}</div>`; return; }
+  if(orders.length===0){ box.innerHTML = `<div class="muted-box">We couldn't find an order matching that. Double-check the ID or phone number.</div>`; return; }
+  box.innerHTML = orders.map(o=>`
     <div class="list-row" style="align-items:flex-start;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
         <div class="li-title">${o.id}</div>
@@ -723,16 +544,11 @@ async function submitHelp(){
   const orderId=document.getElementById("hp-order").value.trim();
   const msg=document.getElementById("hp-msg").value.trim();
   if(!name||!phone||!msg){ showToast("Please fill in your name, phone and message"); return; }
-  await ensureFull();
-  state.messages.push({id:"MSG-"+Date.now(), name, phone, orderId, message:msg, read:false, createdAt:Date.now()});
-  await saveMessages();
-  document.getElementById("hp-name").value="";
-  document.getElementById("hp-phone").value="";
-  document.getElementById("hp-order").value="";
-  document.getElementById("hp-msg").value="";
+  try{ await api("help",{name, phone, orderId, message:msg}); }
+  catch(e){ showToast(e.message); return; }
+  ["hp-name","hp-phone","hp-order","hp-msg"].forEach(id=>document.getElementById(id).value="");
   closeSheet("overlay-help");
   showToast("Message sent! We'll get back to you soon.");
-  renderHelpBadge();
 }
 function renderHelpBadge(){
   const unread = state.messages.filter(m=>!m.read).length;
@@ -742,8 +558,12 @@ function renderHelpBadge(){
 }
 
 /* ---------------- Admin: login ---------------- */
-function openAdminEntry(){
-  if(state.adminLoggedIn){ showView("view-admin"); renderAdminAll(); }
+async function openAdminEntry(){
+  if(!state.adminLoggedIn && adminToken()){
+    try{ await loadAdminData(); state.adminLoggedIn=true; }
+    catch(e){ try{ localStorage.removeItem("tle_admin_token"); }catch(x){} }
+  }
+  if(state.adminLoggedIn){ showView("view-admin"); renderAdminAll(); autoThumbs(); }
   else { showView("view-admin-login"); document.getElementById("admin-pw-input").value=""; document.getElementById("admin-login-error").textContent=""; }
 }
 function toggleAdminPwVisibility(){
@@ -751,18 +571,22 @@ function toggleAdminPwVisibility(){
   inp.type = inp.type==="password" ? "text":"password";
 }
 async function doAdminLogin(){
-  await refreshSharedData();
-  loadAllCustomers().then(()=>{ if(state.adminLoggedIn) renderAdminCustomers(); });
-  const val = document.getElementById("admin-pw-input").value;
-  if(val === state.adminPassword){
+  const err=document.getElementById("admin-login-error"); err.textContent="";
+  try{
+    const j = await api("login",{password:document.getElementById("admin-pw-input").value});
+    try{ localStorage.setItem("tle_admin_token", j.token); }catch(e){}
+    await loadAdminData();
     state.adminLoggedIn = true;
-    showView("view-admin");
-    renderAdminAll();
-  }else{
-    document.getElementById("admin-login-error").textContent = "Incorrect password. Try again.";
-  }
+    showView("view-admin"); renderAdminAll(); autoThumbs();
+  }catch(e){ err.textContent = e.message; }
 }
-function adminLogout(){ state.adminLoggedIn=false; showView("view-storefront"); setNavActive("home"); }
+function adminLogout(){
+  api("logout",{token:adminToken()}).catch(()=>{});
+  try{ localStorage.removeItem("tle_admin_token"); }catch(e){}
+  state.adminLoggedIn=false; state.adminSig="";
+  state.catalogTs=0; loadCatalog().catch(()=>{});     // back to the public view of the catalogue
+  showView("view-storefront"); setNavActive("home");
+}
 
 /* ---------------- Admin tabs ---------------- */
 function setAdminTab(tab){
@@ -770,7 +594,6 @@ function setAdminTab(tab){
   document.querySelectorAll(".atab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll(".admin-tab-content").forEach(el=>el.style.display="none");
   document.getElementById("admin-tab-"+tab).style.display="";   // CSS decides block/grid
-  if(tab==="customers"||tab==="overview") loadAllCustomers().then(()=>{ renderAdminCustomers(); renderAdminOverview(); });
   renderAdminAll();
 }
 function renderAdminAll(){
@@ -831,7 +654,7 @@ function renderProductManagerInto(containerId){
     if(items.length===0) return "";
     return `<div style="font-size:12px;font-weight:800;color:var(--ink-soft);margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.4px;">${escapeHtml(cat)}</div>` +
       items.map(p=>{
-        const img = (p.images&&p.images[0]) ? `<img src="${p.images[0]}">` : `<div style="width:52px;height:52px;border-radius:10px;background:var(--blue-pale);display:flex;align-items:center;justify-content:center;">${placeholderIcon()}</div>`;
+        const img = itemThumb(p) ? `<img src="${itemThumb(p)}">` : `<div style="width:52px;height:52px;border-radius:10px;background:var(--blue-pale);display:flex;align-items:center;justify-content:center;">${placeholderIcon()}</div>`;
         return `
         <div class="admin-product-row">
           ${img}
@@ -861,14 +684,14 @@ function renderProductManagerInto(containerId){
   el.innerHTML = html;
 }
 async function quickUpdate(id, field, value){
-  const p = findItem(id);
+  const p = state.products.find(x=>x.id===id);
   if(!p) return;
   const num = parseFloat(value);
   if(isNaN(num) || num<0){ showToast("Enter a valid number"); renderAdminProducts(); return; }
-  p[field] = num;
-  await saveOneProduct(p);
+  try{ Object.assign(p, (await api("quickUpdate",{id, field, value:num})).product); }
+  catch(e){ showToast(e.message); renderAdminProducts(); return; }
   showToast((field==="price"?"Price":"Stock")+" updated — live on the store now");
-  renderProducts(); queueCachePush();
+  renderProducts();
 }
 
 function openAddProduct(){
@@ -886,9 +709,11 @@ function openAddProduct(){
   document.getElementById("ep-delete-btn").style.display="none";
   openSheet("overlay-editproduct");
 }
-function openEditProduct(id){
-  const p = findItem(id);
+async function openEditProduct(id){
+  const p = state.products.find(x=>x.id===id);
   if(!p) return;
+  let images=[];
+  try{ images = (await loadItem(id,true)).images||[]; }catch(e){ showToast("Couldn't load this product's photos — try again"); return; }
   document.getElementById("ep-title").textContent="Edit product";
   document.getElementById("ep-id").value=id;
   document.getElementById("ep-name").value=p.name;
@@ -896,7 +721,7 @@ function openEditProduct(id){
   document.getElementById("ep-stock").value=p.stock;
   document.getElementById("ep-desc").value=p.desc||"";
   document.getElementById("ep-video").value=p.video||"";
-  state.pendingImages = (p.images||[]).slice();
+  state.pendingImages = images.slice();
   renderCategorySelect(p.category);
   renderImageThumbs();
   document.getElementById("ep-share-btn").style.display="block";
@@ -926,7 +751,7 @@ function removePendingImage(i){ state.pendingImages.splice(i,1); renderImageThum
 
 /* Shrinks a photo before it's stored: resizes it down and re-encodes as
    a JPEG, so a multi-MB phone photo becomes ~50–150KB instead. This is
-   what makes storing images as text inside Firestore actually safe. */
+   what keeps each save small and the store quick. */
 function compressImageFile(file, maxDim=1000, quality=0.72){
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
@@ -951,8 +776,8 @@ function compressImageFile(file, maxDim=1000, quality=0.72){
 function approxBytesOfDataUrl(dataUrl){
   return Math.ceil((dataUrl||"").length * 0.75); // base64 is ~33% bigger than the raw bytes
 }
-const MAX_IMAGE_BYTES = 220*1024;     // per-image ceiling after compression
-const MAX_TOTAL_IMAGE_BYTES = 850*1024; // safe budget per product, under Firestore's 1MB doc limit
+const MAX_IMAGE_BYTES = 400*1024;     // per-image ceiling after compression
+const MAX_TOTAL_IMAGE_BYTES = 2200*1024; // per product/package — keeps each save under the host's 4.5MB request limit
 
 async function handleImageUpload(ev){
   const files = Array.from(ev.target.files||[]);
@@ -1003,34 +828,32 @@ async function saveProduct(){
   if(state.pendingImages.includes("UPLOADING")){
     showToast("Please wait for the image(s) to finish processing"); return;
   }
-  let product;
-  if(id){
-    product = findItem(id);
-    Object.assign(product, {name, category, price, stock, desc, video, images: state.pendingImages.slice()});
-  }else{
-    product = { id:"p"+Date.now(), name, category, price, stock, desc, video, images: state.pendingImages.slice() };
-    state.products.push(product);
-  }
+  const images = state.pendingImages.slice();
   try{
-    await saveOneProduct(product);
+    const thumb = images[0] ? await makeThumb(images[0], 360, 0.6) : "";      // small copy for fast grids
+    const saved = (await api("saveProduct",{product:{id, name, category, price, stock, desc, video, images, thumb}})).product;
+    const i = state.products.findIndex(x=>x.id===saved.id);
+    if(i>=0) state.products[i]=saved; else state.products.push(saved);
+    delete state.itemCache[saved.id];
   }catch(e){
     console.error(e);
-    showToast("Couldn't save — try removing a photo and saving again");
+    showToast(e.message || "Couldn't save — try removing a photo and saving again");
     return;
   }
   closeSheet("overlay-editproduct");
   showToast("Product saved — live on the store now");
-  renderAdminProducts(); renderProducts(); queueCachePush();
+  renderAdminProducts(); renderProducts();
 }
 async function deleteProductConfirm(){
   const id = document.getElementById("ep-id").value;
   if(!id) return;
   if(!confirm("Delete this product? This can't be undone.")) return;
+  try{ state.layout = normLayout((await api("deleteProduct",{id})).layout); }
+  catch(e){ showToast(e.message); return; }
   state.products = state.products.filter(x=>x.id!==id);
-  await deleteOneProduct(id);
   closeSheet("overlay-editproduct");
   showToast("Product deleted");
-  renderAdminProducts(); renderProducts(); queueCachePush();
+  renderAdminProducts(); renderProducts(); renderAdminLayout();
 }
 
 /* Builds a direct link straight to one product (customers land on it
@@ -1068,7 +891,8 @@ function renderAdminOrders(){
       </div>
       <div class="li-sub">${o.phone} · ${escapeHtml(o.address)} · ${new Date(o.createdAt).toLocaleString()}</div>
       <div style="font-size:12.5px;color:var(--ink-soft);margin:6px 0;">${o.items.map(it=>`${it.qty} × ${escapeHtml(it.name)}`).join(", ")}</div>
-      <div style="font-weight:800;font-size:14px;margin-bottom:8px;">GH₵${o.total.toFixed(0)}</div>
+      <div style="font-weight:800;font-size:14px;margin-bottom:${(o.flags&&o.flags.length)?'4':'8'}px;">GH₵${o.total.toFixed(0)}${o.discount?` <span style="font-weight:600;font-size:11.5px;color:var(--ok);">(offer: ${escapeHtml(o.discount.title)}, −GH₵${o.discount.amount})</span>`:''}${o.customerId?` <span style="font-weight:600;font-size:11.5px;color:var(--ink-soft);">· ${o.customerId}</span>`:''}</div>
+      ${(o.flags&&o.flags.length)?`<div style="font-size:11.5px;color:var(--orange);font-weight:700;margin-bottom:8px;">⚠ ${o.flags.map(escapeHtml).join(" · ")}</div>`:''}
       <select style="width:100%;padding:9px;border-radius:9px;border:1.5px solid var(--line);font-size:13px;" onchange="updateOrderStatus('${o.id}',this.value)">
         ${["pending","processing","shipped","completed","cancelled"].map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${statusLabel(s)}</option>`).join("")}
       </select>
@@ -1078,8 +902,8 @@ function renderAdminOrders(){
 async function updateOrderStatus(id, status){
   const o = state.orders.find(x=>x.id===id);
   if(!o) return;
+  try{ await api("orderStatus",{id, status}); }catch(e){ showToast(e.message); renderAdminOrders(); return; }
   o.status = status;
-  await saveOrders();
   showToast("Order "+id+" marked "+statusLabel(status));
   renderAdminOrders();
 }
@@ -1105,8 +929,8 @@ function renderAdminMessages(){
 async function markMessageRead(id){
   const m = state.messages.find(x=>x.id===id);
   if(!m) return;
+  try{ await api("msgRead",{id}); }catch(e){ showToast(e.message); return; }
   m.read=true;
-  await saveMessages();
   renderAdminMessages(); updateMessageBadge();
 }
 
@@ -1114,7 +938,7 @@ function renderAdminReviews(){
   const el = document.getElementById("admin-tab-reviews");
   let rows=[];
   Object.keys(state.reviews).forEach(pid=>{
-    const p = state.products.find(x=>x.id===pid);
+    const p = findItem(pid);
     (state.reviews[pid]||[]).forEach((r,idx)=>{
       rows.push({pid, idx, productName:p?p.name:"(deleted product)", ...r});
     });
@@ -1135,8 +959,9 @@ function renderAdminReviews(){
 }
 async function deleteReview(pid, idx){
   if(!state.reviews[pid]) return;
+  try{ await api("reviewDelete",{pid, idx}); }catch(e){ showToast(e.message); return; }
   state.reviews[pid].splice(idx,1);
-  await saveReviews();
+  delete state.itemCache[pid];
   showToast("Review removed");
   renderAdminReviews();
 }
@@ -1173,7 +998,6 @@ function renderAdminSettings(){
     </div>
   `;
   renderProductManagerInto("settings-product-manager");
-  el.insertAdjacentHTML("beforeend", cacheCardHtml());
 }
 async function changeAdminPassword(){
   const cur=document.getElementById("cp-current").value;
@@ -1181,11 +1005,9 @@ async function changeAdminPassword(){
   const cf=document.getElementById("cp-confirm").value;
   const err=document.getElementById("cp-error");
   err.textContent="";
-  if(cur!==state.adminPassword){ err.textContent="Current password is incorrect."; return; }
-  if(nw.length<6){ err.textContent="New password must be at least 6 characters."; return; }
   if(nw!==cf){ err.textContent="New passwords don't match."; return; }
-  state.adminPassword = nw;
-  await saveAdminPassword();
+  try{ await api("changePassword",{current:cur, next:nw}); }
+  catch(e){ err.textContent=e.message; return; }
   document.getElementById("cp-current").value="";
   document.getElementById("cp-new").value="";
   document.getElementById("cp-confirm").value="";
@@ -1196,18 +1018,20 @@ async function addCategory(){
   const val=inp.value.trim();
   if(!val){ return; }
   if(state.categories.includes(val)){ showToast("That category already exists"); return; }
-  state.categories.push(val);
-  await saveCategories();
+  const next = state.categories.concat(val);
+  try{ await api("saveCategories",{categories:next}); }catch(e){ showToast(e.message); return; }
+  state.categories = next;
   inp.value="";
   showToast("Category added");
-  renderAdminSettings(); renderCategoryChips(); queueCachePush();
+  renderAdminSettings(); renderCategoryChips();
 }
 async function removeCategory(cat){
   if(!confirm(`Remove "${cat}"? Products in it will stay but the category tab will disappear.`)) return;
-  state.categories = state.categories.filter(c=>c!==cat);
-  await saveCategories();
+  const next = state.categories.filter(c=>c!==cat);
+  try{ await api("saveCategories",{categories:next}); }catch(e){ showToast(e.message); return; }
+  state.categories = next;
   showToast("Category removed");
-  renderAdminSettings(); renderCategoryChips(); queueCachePush();
+  renderAdminSettings(); renderCategoryChips();
 }
 
 /* ============================================================
@@ -1230,31 +1054,8 @@ function waNumber(ph){
 }
 
 /* ============================================================
-   PACKAGES (Business Branding Packages) — one Firestore doc each
+   PACKAGES (Business Branding Packages)
    ============================================================ */
-function pkgFromDoc(id, d){ return {id, ...d, kind:"package", stock:999, includes:d.includes||[], images:d.images||[]}; }
-async function loadPackagesList(){
-  if(fbRefs){
-    try{
-      const snap = await fbRefs.getDocs(fbRefs.collection(fbRefs.db, PACKAGES_COLLECTION));
-      const list=[]; snap.forEach(d=> list.push(pkgFromDoc(d.id, d.data())));
-      return list;
-    }catch(e){ console.error("Firestore package list read failed", e); }
-  }
-  try{ const raw=localStorage.getItem("tle_packages"); return raw ? JSON.parse(raw).map(k=>pkgFromDoc(k.id,k)) : []; }
-  catch(e){ return []; }
-}
-async function saveOnePackage(k){
-  const {id, kind, stock, ...rest} = k;
-  if(fbRefs){ await fbRefs.setDoc(fbRefs.doc(fbRefs.db, PACKAGES_COLLECTION, id), rest); return; }
-  if(!state.packages.some(x=>x.id===id)) state.packages.push(k);
-  try{ localStorage.setItem("tle_packages", JSON.stringify(state.packages)); }catch(e){}
-}
-async function deleteOnePackage(id){
-  if(fbRefs){ try{ await fbRefs.deleteDoc(fbRefs.doc(fbRefs.db, PACKAGES_COLLECTION, id)); return; }catch(e){ console.error(e); } }
-  try{ localStorage.setItem("tle_packages", JSON.stringify(state.packages)); }catch(e){}
-}
-
 /* Packages in the order the shopkeeper chose (Layout tab); unlisted ones go last. */
 function sortedPackages(includeHidden){
   const ord = state.layout.packageOrder;
@@ -1353,35 +1154,6 @@ function renderPackages(){
   observeSlides();
 }
 
-/* ============================================================
-   SPEED CACHE — Upstash Redis
-   Shopkeeper saves -> light snapshot (small thumbnails) -> /api/catalog -> Redis.
-   Visitors read the snapshot first (instant), Firestore fills in the rest.
-   ============================================================ */
-function applySnapshot(s){
-  if(!s || state.fullLoaded) return;      // real data already here — never go backwards
-  state.products = s.products || [];
-  state.packages = (s.packages||[]).map(p=>({...p, kind:"package", stock:999}));
-  if(s.categories) state.categories = s.categories;
-  if(s.layout) state.layout = normLayout(s.layout);
-  applyLayout(); renderCategoryChips(); renderProducts(); renderPackages();
-}
-async function fetchCatalogSnapshot(){
-  try{
-    let txt=null;
-    if(UPSTASH_REST_URL && UPSTASH_READONLY_TOKEN){
-      const r=await fetch(UPSTASH_REST_URL.replace(/\/$/,"")+"/get/"+CATALOG_KEY,{headers:{Authorization:"Bearer "+UPSTASH_READONLY_TOKEN}});
-      if(r.ok){ const j=await r.json(); txt=j.result; }
-    }else if(CATALOG_API){
-      const r=await fetch(CATALOG_API); if(r.ok) txt=await r.text();
-    }
-    if(!txt) return null;
-    const snap=JSON.parse(txt);
-    if(!snap || snap.v!==1) return null;
-    try{ localStorage.setItem("tle_snapshot", txt); }catch(e){}
-    return snap;
-  }catch(e){ return null; }
-}
 function makeThumb(dataUrl, maxDim, quality){
   return new Promise(res=>{
     const img=new Image();
@@ -1395,65 +1167,6 @@ function makeThumb(dataUrl, maxDim, quality){
     img.src=dataUrl;
   });
 }
-async function buildCatalogSnapshot(){
-  const products=[];
-  for(const p of state.products){
-    const thumb = (p.images&&p.images[0]) ? await makeThumb(p.images[0],360,0.6) : (p.thumb||"");
-    products.push({id:p.id,name:p.name,category:p.category,price:p.price,stock:p.stock,desc:p.desc||"",video:p.video||"",thumb});
-  }
-  const packages=[];
-  for(const k of state.packages){
-    const full=(k.images&&k.images.length);
-    const src = full ? k.images : (k.thumbs||[]);
-    const thumbs=[];
-    for(const im of src.slice(0,6)) thumbs.push(full ? await makeThumb(im,640,0.62) : im);
-    packages.push({id:k.id,name:k.name,price:k.price,desc:k.desc||"",includes:k.includes||[],video:k.video||"",published:k.published!==false,createdAt:k.createdAt||0,thumbs});
-  }
-  return {v:1, ts:Date.now(), categories:state.categories, layout:state.layout, products, packages};
-}
-function cacheSecret(){ try{ return localStorage.getItem("tle_cache_secret")||""; }catch(e){ return ""; } }
-let cacheTimer=null;
-function queueCachePush(){ if(!cacheSecret()) return; clearTimeout(cacheTimer); cacheTimer=setTimeout(()=>pushCatalogCache(false),1500); }
-function setCacheStatus(msg){ state.cacheStatus=msg; const el=document.getElementById("cache-status"); if(el) el.textContent=msg; }
-async function pushCatalogCache(manual){
-  const secret=cacheSecret();
-  if(!secret){ if(manual) showToast("Paste your cache key in Settings first"); return false; }
-  if(!state.fullLoaded){ if(manual) showToast("Still loading — try again in a moment"); return false; }
-  try{
-    setCacheStatus("Updating speed cache…");
-    const snap=await buildCatalogSnapshot();
-    const r=await fetch(CATALOG_API,{method:"POST",headers:{"Content-Type":"application/json","x-cache-secret":secret},body:JSON.stringify(snap)});
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    setCacheStatus("Speed cache updated at "+new Date().toLocaleTimeString());
-    if(manual) showToast("Speed cache updated");
-    return true;
-  }catch(e){
-    console.error("Cache update failed", e);
-    setCacheStatus("Cache update failed — the store still works, just without the speed boost");
-    if(manual) showToast("Cache update failed — check the key and the Vercel setup");
-    return false;
-  }
-}
-function cacheCardHtml(){
-  return `
-  <div class="list-row" style="flex-direction:column;align-items:stretch;margin-top:14px;">
-    <div class="li-title" style="margin-bottom:6px;">Speed cache (Upstash Redis)</div>
-    <div class="li-sub" style="margin-bottom:10px;">Every product, package, price and layout change you save is copied to Redis automatically, so the store opens instantly for visitors. Paste the cache key you set on the server (it stays on this device only).</div>
-    <div class="field"><label>Cache key</label><input type="password" id="cache-secret" value="${escapeAttr(cacheSecret())}" placeholder="Same value as CACHE_SECRET on the server"></div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-outline" style="flex:1;padding:11px;" onclick="saveCacheSecret()">Save key</button>
-      <button class="btn btn-primary" style="flex:1;padding:11px;" onclick="pushCatalogCache(true)">Refresh cache now</button>
-    </div>
-    <div class="note-inline" id="cache-status">${escapeHtml(state.cacheStatus||(cacheSecret()?"Key saved on this device.":"Not connected yet."))}</div>
-  </div>`;
-}
-function saveCacheSecret(){
-  const v=document.getElementById("cache-secret").value.trim();
-  try{ localStorage.setItem("tle_cache_secret", v); }catch(e){}
-  showToast(v ? "Cache key saved" : "Cache key removed");
-  if(v) pushCatalogCache(true);
-}
-
 /* ============================================================
    CUSTOMERS — no sign-up. A Customer ID is created at the first purchase.
    Document id = Customer ID (the primary key), phone is how repeat buyers are recognised.
@@ -1464,82 +1177,26 @@ function genCustomerId(){
   for(let i=0;i<6;i++) t+=A[Math.floor(Math.random()*A.length)];
   return "TLC-"+t;
 }
-function localCustomers(){ try{ return JSON.parse(localStorage.getItem("tle_customers")||"[]"); }catch(e){ return []; } }
-async function getCustomer(id){
-  if(!/^[A-Za-z0-9-]{4,24}$/.test(id||"")) return null;
-  if(fbRefs){
-    try{ const sn=await fbRefs.getDoc(fbRefs.doc(fbRefs.db, CUSTOMERS_COLLECTION, id)); return sn.exists()?{id:sn.id,...sn.data()}:null; }
-    catch(e){ console.error("Customer read failed", e); }
-  }
-  return localCustomers().find(c=>c.id===id)||null;
-}
-async function findCustomerByPhone(phone){
-  const k=phoneKey(phone); if(k.length<9) return null;
-  if(fbRefs){
-    try{
-      const q=fbRefs.query(fbRefs.collection(fbRefs.db, CUSTOMERS_COLLECTION), fbRefs.where("phoneKey","==",k), fbRefs.limit(1));
-      const sn=await fbRefs.getDocs(q); let c=null; sn.forEach(d=>{ c={id:d.id,...d.data()}; }); return c;
-    }catch(e){ console.error("Customer lookup failed", e); }
-  }
-  return localCustomers().find(c=>c.phoneKey===k)||null;
-}
-async function saveCustomer(c){
-  if(fbRefs){ await fbRefs.setDoc(fbRefs.doc(fbRefs.db, CUSTOMERS_COLLECTION, c.id), stripId(c)); return; }
-  const l=localCustomers().filter(x=>x.id!==c.id); l.push(c);
-  try{ localStorage.setItem("tle_customers", JSON.stringify(l)); }catch(e){}
-}
-async function upsertCustomerFromOrder(form, total, offer){
-  let c = null;
-  if(state.me && phoneKey(state.me.phone)===phoneKey(form.phone)) c = await getCustomer(state.me.id);
-  if(!c) c = await findCustomerByPhone(form.phone);
-  if(!c){
-    let id; do{ id=genCustomerId(); }while(await getCustomer(id));
-    c={id, createdAt:Date.now(), orderCount:0, totalSpent:0};
-  }
-  Object.assign(c,{
-    name:form.name, phone:form.phone, phoneKey:phoneKey(form.phone),
-    email:form.email||c.email||"", address:form.address,
-    payNumber:form.payNumber||c.payNumber||form.phone,
-    lastOrderAt:Date.now(), orderCount:(c.orderCount||0)+1, totalSpent:(c.totalSpent||0)+total
-  });
-  await saveCustomer(c);
-  rememberMe(c);
-  return c;
-}
-function rememberMe(c){
+function rememberMe(c, phone){
   state.me=c;
-  try{ localStorage.setItem("tle_customer_id", c.id); }catch(e){}
-  updateMeDot();
+  try{ localStorage.setItem("tle_me", JSON.stringify({id:c.id, phone:phone||c.phone})); }catch(e){}
+  loadMe(c.id, phone||c.phone).catch(()=>{});
+}
+function savedMe(){ try{ return JSON.parse(localStorage.getItem("tle_me")||"null"); }catch(e){ return null; } }
+async function loadMe(id, phone){
+  const j = await api("me",{id, phone});
+  state.me=j.customer; state.meData=j;
+  updateMeDot(); refreshMeIfOpen();
+  return j;
 }
 async function restoreMe(){
-  let id=""; try{ id=localStorage.getItem("tle_customer_id")||""; }catch(e){}
-  if(!id) return;
-  const c=await getCustomer(id);
-  if(c){ state.me=c; updateMeDot(); }
+  const m=savedMe(); if(!m) return;
+  try{ await loadMe(m.id, m.phone); }
+  catch(e){ if(e.status===401) forgetMe(true); }
 }
-async function loadAllCustomers(){
-  if(fbRefs){
-    try{ const sn=await fbRefs.getDocs(fbRefs.collection(fbRefs.db, CUSTOMERS_COLLECTION)); const l=[]; sn.forEach(d=>l.push({id:d.id,...d.data()})); state.customers=l; return; }
-    catch(e){ console.error("Customer list failed", e); }
-  }
-  state.customers=localCustomers();
-}
-
 /* ============================================================
    OFFERS / ANNOUNCEMENTS — posted by the shopkeeper, matched to purchase history
    ============================================================ */
-function offerEligible(o, c){
-  if(!o || o.active===false) return false;
-  if(o.expiresAt && Date.now()>o.expiresAt) return false;
-  const ids=(o.ids||"").split(/[\s,]+/).filter(Boolean).map(x=>x.toUpperCase());
-  const needsCust = ids.length>0 || (o.minOrders>0) || (o.minSpent>0);
-  if(!needsCust) return true;
-  if(!c) return false;
-  if(ids.length && !ids.includes(c.id.toUpperCase())) return false;
-  if((c.orderCount||0) < (o.minOrders||0)) return false;
-  if((c.totalSpent||0) < (o.minSpent||0)) return false;
-  return true;
-}
 function audienceText(o){
   const bits=[]; const ids=(o.ids||"").trim();
   if(ids) bits.push("Customer IDs: "+ids);
@@ -1547,14 +1204,13 @@ function audienceText(o){
   if(o.minSpent>0) bits.push("GH₵"+o.minSpent+"+ spent");
   return bits.length ? bits.join(" · ") : "Everyone";
 }
-function currentOffers(c){ return state.offers.filter(o=>offerEligible(o,c)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); }
-function updateMeDot(){ const d=document.getElementById("me-dot"); if(d) d.style.display = (state.me && currentOffers(state.me).length) ? "block":"none"; }
+function currentOffers(c){ return state.meData ? state.meData.offers : []; }
+function updateMeDot(){ const d=document.getElementById("me-dot"); if(d) d.style.display = (state.meData && state.meData.offers.some(o=>o.percent>0)) ? "block":"none"; }
 
 /* ---- checkout side ---- */
-function checkoutCust(){ return state.phoneCust || state.me; }
 function currentDiscount(){
-  const o=state.offers.find(x=>x.id===state.checkoutOfferId);
-  if(!o || !(o.percent>0) || !offerEligible(o,checkoutCust())) return {amount:0,offer:null};
+  const o=state.checkoutOffers.find(x=>x.id===state.checkoutOfferId);
+  if(!o || !(o.percent>0)) return {amount:0,offer:null};
   return {amount:Math.round(cartTotal()*Math.min(o.percent,90)/100), offer:o};
 }
 function checkoutTotal(){ return Math.max(0, cartTotal()-currentDiscount().amount); }
@@ -1566,7 +1222,7 @@ function updateCheckoutTotals(){
   document.getElementById("co-total").textContent="GH₵"+checkoutTotal().toFixed(0);
 }
 function refreshCheckoutOffers(){
-  const list=currentOffers(checkoutCust()).filter(o=>o.percent>0);
+  const list=state.checkoutOffers;
   const wrap=document.getElementById("co-offer-wrap"), sel=document.getElementById("co-offer");
   if(!list.length){ wrap.style.display="none"; state.checkoutOfferId=""; }
   else{
@@ -1578,21 +1234,21 @@ function refreshCheckoutOffers(){
 }
 function pickCheckoutOffer(v){ state.checkoutOfferId=v; updateCheckoutTotals(); }
 async function lookupPhoneForOffers(){
-  state.phoneCust = await findCustomerByPhone(document.getElementById("co-phone").value);
-  refreshCheckoutOffers();
+  try{
+    const j = await api("offersFor",{phone:document.getElementById("co-phone").value});
+    state.checkoutOffers = j.offers;
+    refreshCheckoutOffers();
+  }catch(e){ /* keep the public offers */ }
 }
 
 /* ============================================================
    ME — purchase history, Customer ID, offers & updates
    ============================================================ */
-function myOrders(){ return state.me ? state.orders.filter(o=>o.customerId===state.me.id).sort((a,b)=>b.createdAt-a.createdAt) : []; }
 async function openMe(){
   showView("view-me"); setNavActive("none"); renderMe();
-  try{
-    await loadRest();
-    if(state.me){ const c=await getCustomer(state.me.id); if(c) state.me=c; }
-  }catch(e){}
-  renderMe(); updateMeDot();
+  const m=savedMe();
+  if(m){ try{ await loadMe(m.id, m.phone); }catch(e){ if(e.status===401) forgetMe(true); } }
+  renderMe();
 }
 function refreshMeIfOpen(){ updateMeDot(); if(document.getElementById("view-me").classList.contains("active")) renderMe(); }
 function offerCardHtml(o){
@@ -1610,7 +1266,7 @@ function setMeTab(t){ state.meTab=t; renderMe(); }
 function renderMe(){
   const el=document.getElementById("me-body"); if(!el) return;
   if(!state.me){
-    const pub=currentOffers(null);
+    const pub=state.offers;
     el.innerHTML=`
       <div class="me-card">
         <div class="me-top"><div class="me-avatar">?</div><div><div class="me-name">Welcome</div><div class="me-sub">No sign-up needed</div></div></div>
@@ -1626,7 +1282,7 @@ function renderMe(){
       ${pub.length?`<div class="sub-title">Open to everyone right now</div>${pub.map(offerCardHtml).join("")}`:""}`;
     return;
   }
-  const c=state.me, orders=myOrders(), tab=state.meTab||"offers", offers=currentOffers(c);
+  const c=state.me, orders=state.meData?state.meData.orders:[], tab=state.meTab||"offers", offers=state.meData?state.meData.offers:[];
   el.innerHTML=`
     <div class="me-card">
       <div class="me-top">
@@ -1658,13 +1314,17 @@ async function signInMe(){
   const id=document.getElementById("me-id").value.trim().toUpperCase();
   const ph=document.getElementById("me-phone").value;
   const err=document.getElementById("me-error"); err.textContent="";
-  const c=await getCustomer(id);
-  if(!c || phoneKey(ph)!==c.phoneKey){ err.textContent="We couldn't match that Customer ID with that phone number."; return; }
-  rememberMe(c); state.meTab="history"; renderMe();
+  try{
+    await loadMe(id, ph);
+    try{ localStorage.setItem("tle_me", JSON.stringify({id, phone:ph})); }catch(e){}
+    state.meTab="history"; renderMe();
+  }catch(e){
+    err.textContent = e.status===401 ? "We couldn't match that Customer ID with that phone number." : e.message;
+  }
 }
-function forgetMe(){
-  state.me=null; try{ localStorage.removeItem("tle_customer_id"); }catch(e){}
-  updateMeDot(); renderMe();
+function forgetMe(silent){
+  state.me=null; state.meData=null; try{ localStorage.removeItem("tle_me"); }catch(e){}
+  updateMeDot(); if(!silent) renderMe();
 }
 
 /* ============================================================
@@ -1699,8 +1359,10 @@ function openAddPackage(){
   document.getElementById("pk-delete-btn").style.display="none";
   openSheet("overlay-editpackage");
 }
-function openEditPackage(id){
+async function openEditPackage(id){
   const k=state.packages.find(x=>x.id===id); if(!k) return;
+  let images=[];
+  try{ images=(await loadItem(id,true)).images||[]; }catch(e){ showToast("Couldn't load this package's photos — try again"); return; }
   document.getElementById("pk-title").textContent="Edit package";
   document.getElementById("pk-id").value=id;
   document.getElementById("pk-name").value=k.name;
@@ -1709,7 +1371,7 @@ function openEditPackage(id){
   document.getElementById("pk-desc").value=k.desc||"";
   document.getElementById("pk-video").value=k.video||"";
   document.getElementById("pk-published").value=k.published===false?"0":"1";
-  state.pendingImages=(k.images||[]).slice(); renderImageThumbs();
+  state.pendingImages=images.slice(); renderImageThumbs();
   document.getElementById("pk-delete-btn").style.display="block";
   openSheet("overlay-editpackage");
 }
@@ -1719,40 +1381,37 @@ async function savePackage(){
   const price=parseFloat(document.getElementById("pk-price").value);
   if(!name || isNaN(price) || price<0){ showToast("Please fill in a valid name and price"); return; }
   if(state.pendingImages.includes("UPLOADING")){ showToast("Please wait for the image(s) to finish processing"); return; }
-  const data={
-    name, price,
-    includes: document.getElementById("pk-includes").value.split("\n").map(x=>x.trim()).filter(Boolean),
-    desc: document.getElementById("pk-desc").value.trim(),
-    video: document.getElementById("pk-video").value.trim(),
-    published: document.getElementById("pk-published").value==="1",
-    images: state.pendingImages.slice()
-  };
-  let k=id ? state.packages.find(x=>x.id===id) : null;
-  const isNew=!k;
-  if(k) Object.assign(k,data); else k={id:"pk"+Date.now(), kind:"package", stock:999, createdAt:Date.now(), ...data};
-  try{ await saveOnePackage(k); }
-  catch(e){ console.error(e); showToast("Couldn't save — try removing a photo and saving again"); return; }
-  if(!state.packages.some(x=>x.id===k.id)) state.packages.push(k);
-  if(isNew){ state.layout.packageOrder=state.layout.packageOrder.filter(x=>x!==k.id).concat(k.id); await docSet("layout", state.layout); }
+  const images=state.pendingImages.slice();
+  const published=document.getElementById("pk-published").value==="1";
+  try{
+    const thumbs=[]; for(const im of images.slice(0,6)){ const t=await makeThumb(im,640,0.62); if(t) thumbs.push(t); }
+    const old=state.packages.find(x=>x.id===id);
+    const res=await api("savePackage",{pkg:{
+      id, name, price, images, thumbs, published, createdAt: old?old.createdAt:undefined,
+      includes: document.getElementById("pk-includes").value.split("\n").map(x=>x.trim()).filter(Boolean),
+      desc: document.getElementById("pk-desc").value.trim(), video: document.getElementById("pk-video").value.trim()
+    }});
+    const k=pkgNorm(res.pkg), i=state.packages.findIndex(x=>x.id===k.id);
+    if(i>=0) state.packages[i]=k; else state.packages.push(k);
+    state.layout=normLayout(res.layout); delete state.itemCache[k.id];
+  }catch(e){ console.error(e); showToast(e.message || "Couldn't save — try removing a photo and saving again"); return; }
   closeSheet("overlay-editpackage");
-  showToast(data.published ? "Package saved — live on the website now" : "Package saved as hidden");
-  renderAdminPackages(); renderAdminLayout(); renderPackages(); queueCachePush();
+  showToast(published ? "Package saved — live on the website now" : "Package saved as hidden");
+  renderAdminPackages(); renderAdminLayout(); renderPackages();
 }
 async function togglePackage(id){
   const k=state.packages.find(x=>x.id===id); if(!k) return;
-  k.published = (k.published===false);
-  await saveOnePackage(k);
+  try{ Object.assign(k, pkgNorm((await api("togglePackage",{id})).pkg)); }catch(e){ showToast(e.message); return; }
   showToast(k.published ? "Package is live" : "Package hidden from the website");
-  renderAdminPackages(); renderPackages(); queueCachePush();
+  renderAdminPackages(); renderPackages();
 }
 async function deletePackageConfirm(){
   const id=document.getElementById("pk-id").value; if(!id) return;
   if(!confirm("Delete this package? This can't be undone.")) return;
+  try{ state.layout=normLayout((await api("deletePackage",{id})).layout); }catch(e){ showToast(e.message); return; }
   state.packages=state.packages.filter(x=>x.id!==id);
-  state.layout.packageOrder=state.layout.packageOrder.filter(x=>x!==id);
-  await deleteOnePackage(id); await docSet("layout", state.layout);
   closeSheet("overlay-editpackage"); showToast("Package deleted");
-  renderAdminPackages(); renderAdminLayout(); renderPackages(); queueCachePush();
+  renderAdminPackages(); renderAdminLayout(); renderPackages();
 }
 
 /* ============================================================
@@ -1832,22 +1491,23 @@ async function saveOffer(){
     expiresAt: exp ? new Date(exp+"T23:59:59").getTime() : 0,
     active: document.getElementById("of-active").value==="1"
   };
-  await ensureFull();
-  const existing=state.offers.find(x=>x.id===id);
-  if(existing) Object.assign(existing,data); else state.offers.push({id:"of"+Date.now(), createdAt:Date.now(), ...data});
-  await docSet("offers", state.offers);
+  const next=state.offers.map(o=>({...o}));
+  const existing=next.find(x=>x.id===id);
+  if(existing) Object.assign(existing,data); else next.push({id:"of"+Date.now(), createdAt:Date.now(), ...data});
+  if(!(await persistOffers(next))) return;
   closeSheet("overlay-editoffer"); showToast("Saved — customers see it under Me");
-  renderAdminOffers();
+}
+async function persistOffers(next){
+  try{ await api("saveOffers",{offers:next}); }catch(e){ showToast(e.message); return false; }
+  state.offers=next; renderAdminOffers(); return true;
 }
 async function toggleOffer(id){
-  const o=state.offers.find(x=>x.id===id); if(!o) return;
-  o.active = (o.active===false); await docSet("offers", state.offers);
-  renderAdminOffers(); showToast(o.active?"Offer resumed":"Offer paused");
+  const next=state.offers.map(o=>o.id===id?{...o,active:o.active===false}:{...o});
+  if(await persistOffers(next)) showToast(next.find(o=>o.id===id).active?"Offer resumed":"Offer paused");
 }
 async function deleteOfferConfirm(){
   const id=document.getElementById("of-id").value; if(!id||!confirm("Delete this? This can't be undone.")) return;
-  state.offers=state.offers.filter(x=>x.id!==id); await docSet("offers", state.offers);
-  closeSheet("overlay-editoffer"); renderAdminOffers(); showToast("Deleted");
+  if(await persistOffers(state.offers.filter(x=>x.id!==id))){ closeSheet("overlay-editoffer"); showToast("Deleted"); }
 }
 
 /* ---- Layout: what shows first, package order, pinned products ---- */
@@ -1871,8 +1531,8 @@ function renderAdminLayout(){
     </div>`;
 }
 async function saveLayout(msg){
-  await docSet("layout", state.layout);
-  applyLayout(); renderPackages(); renderProducts(); renderAdminLayout(); queueCachePush();
+  try{ await api("saveLayout",{layout:state.layout}); }catch(e){ showToast(e.message); return; }
+  applyLayout(); renderPackages(); renderProducts(); renderAdminLayout();
   showToast(msg||"Home layout saved — live now");
 }
 function setSectionOrder(first){ state.layout.sectionOrder = first==="packages" ? ["packages","products"] : ["products","packages"]; saveLayout(); }
@@ -1886,6 +1546,30 @@ function moveItem(kind,id,dir){
 function pinProduct(id){ if(!id||state.layout.productPins.includes(id)) return; state.layout.productPins.push(id); saveLayout("Pinned — it now shows first"); }
 function unpinProduct(id){ state.layout.productPins=state.layout.productPins.filter(x=>x!==id); saveLayout("Unpinned"); }
 
+/* Photos migrated from the old database have no small thumbnail yet — build them once, quietly,
+   the first time the shopkeeper opens the dashboard. */
+async function autoThumbs(){
+  if(state.thumbRun) return;
+  const needP=state.products.filter(p=>p.imgCount>0 && !p.thumb), needK=state.packages.filter(k=>k.imgCount>0 && !(k.thumbs&&k.thumbs.length));
+  if(!needP.length && !needK.length) return;
+  state.thumbRun=true; showToast("Preparing photo thumbnails ("+(needP.length+needK.length)+")…");
+  try{
+    for(const p of needP){
+      const im=((await loadItem(p.id,true)).images||[])[0]; if(!im) continue;
+      const t=await makeThumb(im,360,0.6); if(!t) continue;
+      await api("setThumb",{id:p.id, thumb:t}); p.thumb=t;
+    }
+    for(const k of needK){
+      const ims=((await loadItem(k.id,true)).images||[]).slice(0,6); const thumbs=[];
+      for(const im of ims){ const t=await makeThumb(im,640,0.62); if(t) thumbs.push(t); }
+      if(!thumbs.length) continue;
+      await api("setThumb",{id:k.id, thumbs}); k.thumbs=thumbs;
+    }
+    showToast("Thumbnails ready — the store will now open faster");
+  }catch(e){ console.error("Thumbnail build failed", e); }
+  state.thumbRun=false; renderProducts(); renderPackages(); if(state.adminLoggedIn) renderAdminAll();
+}
+
 /* ---------------- Utility ---------------- */
 function escapeHtml(str){
   return String(str||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
@@ -1893,25 +1577,6 @@ function escapeHtml(str){
 function escapeAttr(str){ return escapeHtml(str).replace(/`/g,"&#96;"); }
 
 /* ---------------- Sync across devices ---------------- */
-async function refreshSharedData(){
-  await loadAll();
-}
-function startPolling(){
-  if(state.pollTimer) clearInterval(state.pollTimer);
-  state.pollTimer = setInterval(async ()=>{
-    await refreshSharedData();
-    if(document.getElementById("view-storefront").classList.contains("active")){
-      renderCategoryChips(); renderProducts(); renderPackages();
-    }
-    if(document.getElementById("view-admin").classList.contains("active")){
-      renderAdminAll();
-    }
-    if(document.getElementById("view-tracking").classList.contains("active")){
-      // don't overwrite results unless user searched already
-    }
-  }, 6000);
-}
-
 /* ---------------- Init ---------------- */
 function renderAll(){
   applyLayout();
@@ -1934,44 +1599,11 @@ function openSharedProductFromURL(){
 }
 (async function init(){
   applyLayout();
-  // 1) instant paint from the last speed-cache snapshot this device saw
-  try{ const raw=localStorage.getItem("tle_snapshot"); if(raw) applySnapshot(JSON.parse(raw)); }catch(e){}
-  // 2) in parallel, ask Redis for the newest snapshot (usually tens of milliseconds)
-  fetchCatalogSnapshot().then(snap=>{ if(snap) applySnapshot(snap); });
-  // 3) meanwhile Firestore connects and loads the FULL catalogue (all photos)
-  let usingFirebase = false;
-  try{
-    usingFirebase = await initFirebase();
-  }catch(e){
-    console.error("Firebase failed to start — showing the store without live sync.", e);
-    usingFirebase = false;
-  }
-  try{
-    await loadCatalog();
-  }catch(e){
-    console.error("Couldn't load store data — falling back to defaults so the page isn't blank.", e);
-    if(!state.products || state.products.length===0) state.products = DEFAULT_PRODUCTS.slice();
-    if(!state.categories || state.categories.length===0) state.categories = DEFAULT_CATEGORIES.slice();
-    state.fullLoaded = true;
-  }
+  // 1) instant paint from the last catalogue this device saw
+  try{ const raw=localStorage.getItem("tle_snapshot"); if(raw){ applyCatalog(JSON.parse(raw)); safeRenderAll(); } }catch(e){}
+  // 2) the newest catalogue from Redis
+  try{ await loadCatalog(); }
+  catch(e){ console.error("Couldn't load the store", e); showLoadError(); }
   safeRenderAll();
-  try{ await loadRest(); }catch(e){ console.error("Couldn't load orders/messages yet", e); }
-  restoreMe();
-  try{
-    if(usingFirebase) subscribeRealtime(); // instant cross-device updates, no polling needed
-    else startPolling(); // same-device fallback so multiple open tabs stay in sync
-  }catch(e){
-    console.error("Realtime sync failed to start — falling back to periodic refresh.", e);
-    startPolling();
-  }
+  restoreMe(); retryPendingOrder(); startPolling();
 })();
-// Absolute last resort: if something above still leaves the page stuck on
-// loading placeholders after 8 seconds, force real content to appear.
-setTimeout(()=>{
-  if(!didFirstRender){
-    console.error("Store took too long to load — forcing a render with defaults.");
-    if(!state.products || state.products.length===0) state.products = DEFAULT_PRODUCTS.slice();
-    if(!state.categories || state.categories.length===0) state.categories = DEFAULT_CATEGORIES.slice();
-    safeRenderAll();
-  }
-}, 8000);
